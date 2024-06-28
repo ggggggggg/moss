@@ -38,7 +38,7 @@ class AutoCorrelation:
         axis.set_xlabel("Lag Time (s)")
         axis.figure.tight_layout()
 
-def calc_spectrum(data, dt, window=None):
+def calc_psd(data, dt, window=None):
         """Process a data segment of length 2m using the window function
         given.  window can be None (square window), a callable taking the
         length and returning a sequence, or a sequence."""
@@ -51,7 +51,7 @@ def calc_spectrum(data, dt, window=None):
             sum_window = m2
         else:
             try:
-                w = window(self.m2)
+                w = window(m2)
             except TypeError:
                 w = np.array(window)
             wksp = w * data
@@ -67,19 +67,19 @@ def calc_spectrum(data, dt, window=None):
         return specsum / ntraces
 
 
-def calc_spectrum_frequencies(nbins, dt):
+def calc_psd_frequencies(nbins, dt):
     return np.arange(nbins, dtype=float) / (2 * dt * nbins)
 
-def power_spectrum(data, dt, window=None):
-    spectrum = calc_spectrum(data, dt, window) 
-    nbins = len(spectrum)
-    frequencies = calc_spectrum_frequencies(nbins, dt)
-    return PowerSpectrum(spectrum,
+def noise_psd(data, dt, window=None):
+    psd = calc_psd(data, dt, window) 
+    nbins = len(psd)
+    frequencies = calc_psd_frequencies(nbins, dt)
+    return NoisePSD(psd,
                          frequencies)
 
 @dataclass
-class PowerSpectrum:
-    spectrum: np.ndarray
+class NoisePSD:
+    psd: np.ndarray
     frequencies: np.ndarray
     
 
@@ -88,7 +88,7 @@ class PowerSpectrum:
             plt.figure()
             axis = plt.gca()
         arb_to_unit_scale, unit_label = arb_to_unit_scale_and_label
-        psd = self.spectrum[1:] * (arb_to_unit_scale**2)
+        psd = self.psd[1:] * (arb_to_unit_scale**2)
         freq = self.frequencies[1:]
         if sqrt_psd:
             axis.plot(freq, np.sqrt(psd), **plotkwarg)
