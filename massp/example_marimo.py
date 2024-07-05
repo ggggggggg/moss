@@ -753,17 +753,19 @@ def __(dataclass, field, pl):
 
 @app.cell
 def __(
+    Bool,
     CalSteps,
     ChannelHeader,
+    Filter5LagStep,
     NoiseChannel,
     RoughCalibrationStep,
     SummarizeStep,
-    avg_pulse,
     dataclass,
     field,
     mass,
     massp,
     np,
+    outlier_resistant_nsigma_above_mid,
     peak_ind,
     pl,
 ):
@@ -772,6 +774,7 @@ def __(
         df: pl.DataFrame | pl.LazyFrame = field(repr=False)
         header: ChannelHeader = field(repr=True)
         noise: NoiseChannel = field(repr=False)
+        good_expr: Bool | pl.Expr = True
         df_history: list[pl.DataFrame | pl.LazyFrame] = field(
             default_factory=list, repr=False
         )
@@ -791,8 +794,16 @@ def __(
         def rough_cal(
             self, line_names, uncalibrated_col, calibrated_col, ph_smoothing_fwhm
         ):
+            # this is meant to filter the data, then select down to the columsn we need, then materialize them, all without copying our pulse records again
+            uncalibrated = (
+                self.df.lazy()
+                .filter(self.good_expr)
+                .select(pl.col(uncalibrated_col))
+                .collect()[uncalibrated_col]
+                .to_numpy()
+            )
             peak_ph_vals, _peak_heights = mass.algorithms.find_local_maxima(
-                self.df[uncalibrated_col].to_numpy(), gaussian_fwhm=ph_smoothing_fwhm
+                uncalibrated, gaussian_fwhm=ph_smoothing_fwhm
             )
             name_e, energies_out, opt_assignments = mass.algorithms.find_opt_assignment(
                 peak_ph_vals,
@@ -811,7 +822,13 @@ def __(
             # if any(np.abs(energy_residuals) > max_residual_ev):
             #     raise Exception(f"too large residuals: {energy_residuals=} eV")
             step = RoughCalibrationStep(
-                [uncalibrated_col], calibrated_col, rough_cal_f, name_e, energies_out
+                [uncalibrated_col],
+                calibrated_col,
+                self.good_expr,
+                rough_cal_f,
+                name_e,
+                energies_out,
+                energy_residuals,
             )
             return self.with_step(step)
 
@@ -821,15 +838,36 @@ def __(
                 df=df2,
                 header=self.header,
                 noise=self.noise,
+                good_expr=self.good_expr,
                 df_history=self.df_history + [self.df],
                 cal=self.cal.with_step(step),
             )
             return ch2
 
+        def with_good_expr_pretrig_mean_and_postpeak_deriv(self):
+            max_postpeak_deriv = outlier_resistant_nsigma_above_mid(
+                self.df["postpeak_deriv"].to_numpy(), nsigma=20
+            )
+            max_pretrig_rms = outlier_resistant_nsigma_above_mid(
+                self.df["pretrig_rms"].to_numpy(), nsigma=20
+            )
+            good_expr = (pl.col("postpeak_deriv") < max_postpeak_deriv).and_(
+                pl.col("pretrig_rms") < max_pretrig_rms
+            )
+            return Channel(
+                df=self.df,
+                header=self.header,
+                noise=self.noise,
+                good_expr=good_expr,
+                df_history=self.df_history,
+                cal=self.cal,
+            )
+
         def summarize_pulses(self):
             step = SummarizeStep(
                 inputs=["pulse"],
                 output="many",
+                good_expr=self.good_expr,
                 f=None,
                 frametime_s=self.header.frametime_s,
                 peak_index=peak_ind,
@@ -839,17 +877,34 @@ def __(
             )
             return self.with_step(step)
 
-        def learn_5lag_filter(self, f_3db=25e3, **spectrum_kwarg):
-            spectrum5lag = self.noise.spectrum(
-                trunc_front=2, trunc_back=2, **spectrum_kwarg
+        def filter5lag(self, pulse_col="pulse", peak_y_col="5lagy", peak_x_col="5lagx", f_3db=25e3, use_expr=True):
+            avg_pulse = (
+                self.df.lazy()
+                .filter(self.good_expr)
+                .filter(use_expr)
+                .select(pulse_col)
+                .limit(2000)
+                .collect()[pulse_col]
+                .to_numpy()
+                .mean(axis=0)
             )
+            spectrum5lag = self.noise.spectrum(trunc_front=2, trunc_back=2)
             filter5lag = massp.fourier_filter(
                 avg_signal=avg_pulse[2:-2],
                 noise_psd=spectrum5lag.psd,
                 dt=self.header.frametime_s,
                 f_3db=f_3db,
             )
-            return filter5lag
+            step = Filter5LagStep(
+                inputs=["pulse"],
+                output=[peak_x_col, peak_y_col],
+                good_expr=self.good_expr,
+                f=None,
+                filter=filter5lag,
+                spectrum=spectrum5lag,
+                use_expr=use_expr
+            )
+            return self.with_step(step)
 
         def __hash__(self):
             # needed to make functools.cache work
@@ -878,13 +933,24 @@ def __(NoiseChannel, df_noise, header_df, header_df_noise, mo, plt):
 @app.cell
 def __(Channel, ChannelHeader, df, header_df, noise_ch):
     channel = Channel(df, ChannelHeader.from_ljh_header_df(header_df), noise_ch)
-    channel2 = channel.summarize_pulses().rough_cal(
-        ["MnKAlpha", "MnKBeta", "CuKAlpha", "CuKBeta", "PdLAlpha", "PdLBeta"],
-        uncalibrated_col="peak_value",
-        calibrated_col="energy_peak_value",
-        ph_smoothing_fwhm=50,
+    channel2 = (
+        channel.summarize_pulses()
+        .with_good_expr_pretrig_mean_and_postpeak_deriv()
+        .rough_cal(
+            ["MnKAlpha", "MnKBeta", "CuKAlpha", "CuKBeta", "PdLAlpha", "PdLBeta"],
+            uncalibrated_col="peak_value",
+            calibrated_col="energy_peak_value",
+            ph_smoothing_fwhm=50,
+        )
     )
-    return channel, channel2
+    channel3 = (channel2.filter5lag(f_3db=10e3).rough_cal(
+            ["MnKAlpha", "MnKBeta", "CuKAlpha", "CuKBeta", "PdLAlpha", "PdLBeta"],
+            uncalibrated_col="5lagy",
+            calibrated_col="energy_5lagy",
+            ph_smoothing_fwhm=50,
+        )
+               )
+    return channel, channel2, channel3
 
 
 @app.cell
@@ -896,11 +962,37 @@ def __(channel2, mo, plt):
 
 
 @app.cell
-def __(Callable, dataclass, energies_out, massp, np, pl, plot_hist):
+def __(channel3, mo, plt):
+    channel3.dbg_plot(step_ind=3)
+    mo.mpl.interactive(plt.gcf())
+    return
+
+
+@app.cell
+def __(channel3):
+    channel3.df.columns
+    return
+
+
+@app.cell
+def __(
+    Callable,
+    Filter,
+    dataclass,
+    energies_out,
+    filter5lag,
+    filter_data_5lag,
+    massp,
+    np,
+    pl,
+    plot_hist,
+    spectrum,
+):
     @dataclass(frozen=True)
     class CalStep:
         inputs: list[str]
         output: str
+        good_expr: pl.Expr
         f: Callable[..., float]
 
         def __call__(self, *args, **kwargs) -> float:
@@ -933,13 +1025,21 @@ def __(Callable, dataclass, energies_out, massp, np, pl, plot_hist):
     class RoughCalibrationStep(CalStep):
         line_names: list[str]
         energies: np.ndarray
+        energy_residuals: np.ndarray
 
-        def dbg_plot(self, df, bin_edges=np.arange(0, 40000, 10), axis=None, plotkwarg={}):
-            axis = plot_hist(df[self.output], np.arange(0, 10000, 10))
+        def dbg_plot(self, df, bin_edges=np.arange(0, 10000, 1), axis=None, plotkwarg={}):
+            series = (
+                df.lazy()
+                .filter(self.good_expr)
+                .select(pl.col(self.output))
+                .collect()[self.output]
+            )
+            axis = plot_hist(series, bin_edges)
             axis.plot(self.energies, np.zeros(len(energies_out)), "o")
             for line_name, energy in zip(self.line_names, self.energies):
                 axis.annotate(line_name, (energy, 0), rotation=90)
-            axis.set_title(f"RoughCalibrationStep dbg_plot")
+            np.set_printoptions(precision=2)
+            axis.set_title(f"RoughCalibrationStep dbg_plot\n{self.energy_residuals=}")
             return axis
 
 
@@ -965,6 +1065,27 @@ def __(Callable, dataclass, energies_out, massp, np, pl, plot_hist):
                 for df_iter in df.iter_slices()
             ).with_columns(df)
             return df2
+
+
+    @dataclass(frozen=True)
+    class Filter5LagStep(CalStep):
+        filter: Filter
+        spectrum: spectrum
+        use_expr: pl.Expr
+
+        def calc_from_df(self, df):
+            dfs = []
+            for df_iter in df.iter_slices(10000):
+                peak_x, peak_y = filter_data_5lag(
+                    filter5lag.filter, df_iter[self.inputs[0]].to_numpy()
+                )
+                dfs.append(pl.DataFrame({"peak_x": peak_x, "peak_y": peak_y}))
+            df2 = pl.concat(dfs).with_columns(df)
+            df2 = df2.rename({"peak_x":self.output[0], "peak_y":self.output[1]})
+            return df2
+
+        def dbg_plot(self, df):
+            return self.filter.plot()
 
 
     @dataclass(frozen=True)
@@ -1001,7 +1122,13 @@ def __(Callable, dataclass, energies_out, massp, np, pl, plot_hist):
         def with_step(self, step: CalStep):
             # return a new CalSteps with the step added, no mutation!
             return CalSteps(self.steps + [step])
-    return CalStep, CalSteps, RoughCalibrationStep, SummarizeStep
+    return (
+        CalStep,
+        CalSteps,
+        Filter5LagStep,
+        RoughCalibrationStep,
+        SummarizeStep,
+    )
 
 
 @app.cell
