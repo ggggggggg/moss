@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 def fourier_filter(avg_signal, noise_psd, dt, fmax=None, f_3db=None, peak_signal=1.0):
     filter, variance = calc_fourier_filter(avg_signal, noise_psd, dt, fmax, f_3db, peak_signal)
-    return Filter(filter, variance, dt, filter_type="fourier")
+    return Filter(filter, variance, dt, filter_type="fourier")    
 
 @dataclass
 class Filter:
@@ -34,7 +34,8 @@ class Filter:
 def apply_fmax(signal_freq_domain, fmax, dt):
     if fmax is None:
         return signal_freq_domain
-    freq = np.arange(0, n, dtype=float) * 0.5 / ((n - 1) * sample_time)
+    n = len(signal_freq_domain)
+    freq = np.arange(0, n, dtype=float) * 0.5 / ((n - 1) * dt)
     out = signal_freq_domain[:]
     out[freq>fmax]=0
     return out
@@ -42,10 +43,12 @@ def apply_fmax(signal_freq_domain, fmax, dt):
 def apply_f_3db(signal_freq_domain, f_3db, dt):
     if f_3db is None:
         return signal_freq_domain
-    freq = np.arange(0, n, dtype=float) * 0.5 / ((n - 1) * sample_time)
+    n = len(signal_freq_domain)
+    freq = np.arange(0, n, dtype=float) * 0.5 / ((n - 1) * dt)
     return signal_freq_domain / (1 + (freq * 1.0 / f_3db)**2)
 
 def normalize_filter(filter):
+    filter -= np.mean(filter)
     return filter/np.sqrt(np.dot(filter, filter))
 
 def calc_fourier_filter(avg_signal, noise_psd, dt, fmax=None, f_3db=None, peak_signal=1.0):

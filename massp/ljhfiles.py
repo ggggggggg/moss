@@ -60,6 +60,7 @@ class LJHFile():
 
         # extract required values from header_dict
         # use header_dict.get for default values
+        header_dict["Filename"] = filename
         header_dict["Channel"] = int(header_dict["Channel"])
         header_dict["Timebase"] = float(header_dict["Timebase"])
         self.timebase = header_dict["Timebase"]
