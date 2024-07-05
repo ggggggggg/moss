@@ -756,12 +756,14 @@ def __(
     Bool,
     CalSteps,
     ChannelHeader,
+    DriftCorrectStep,
     Filter5LagStep,
     NoiseChannel,
     RoughCalibrationStep,
     SummarizeStep,
     dataclass,
     field,
+    histo,
     mass,
     massp,
     np,
@@ -785,7 +787,7 @@ def __(
             if step_ind + 1 == len(self.df_history):
                 df_after = self.df
             else:
-                df_after = self.df_history[step_ind]
+                df_after = self.df_history[step_ind+1]
             return step.dbg_plot(df_after)
 
         def plot_hist(self, col, bin_edges, axis=None):
@@ -906,6 +908,33 @@ def __(
             )
             return self.with_step(step)
 
+        def driftcorrect(self, indicator="pretrig_mean", uncorrected="5lagy", corrected=None, use_expr=True):
+            if corrected is None:
+                corrected = uncorrected+"_dc"
+            df_dc = self.df.lazy().filter(self.good_expr).filter(use_expr).select([indicator, uncorrected]).collect()
+            dc = massp.drift_correct(
+                indicator=df_dc[indicator].to_numpy(),
+                uncorrected=df_dc[uncorrected].to_numpy(),
+            )
+            step = DriftCorrectStep(inputs=[indicator, uncorrected],
+                                   output=corrected,
+                                   good_expr=self.good_expr, 
+                                   f=None,
+                                   dc = dc,
+                                   use_expr=use_expr)
+            return self.with_step(step)
+
+        def linefit(self, line, col, use_expr=True, has_linear_background=False, has_tails=False, dlo=50, dhi=50, binsize=0.5):
+            model = mass.get_model(line, has_linear_background=False, has_tails=False)
+            pe = model.spect.peak_energy
+            _bin_edges = np.arange(pe - dlo, pe + dhi, binsize)
+            df_small = self.df.lazy().filter(self.good_expr).filter(use_expr).select(col).collect()
+            bin_centers, counts = histo(df_small[col], _bin_edges)
+            params = model.guess(counts, bin_centers=bin_centers, dph_de=1)
+            params["dph_de"].set(1.0, vary=False)
+            result = model.fit(counts, params, bin_centers=bin_centers, minimum_bins_per_fwhm=3)
+            return result
+
         def __hash__(self):
             # needed to make functools.cache work
             # if self or self.anything is mutated, assumptions will be broken
@@ -950,14 +979,35 @@ def __(Channel, ChannelHeader, df, header_df, noise_ch):
             ph_smoothing_fwhm=50,
         )
                )
-    return channel, channel2, channel3
+    channel4 = (channel3.driftcorrect().rough_cal(
+            ["MnKAlpha", "MnKBeta", "CuKAlpha", "CuKBeta", "PdLAlpha", "PdLBeta"],
+            uncalibrated_col="5lagy_dc",
+            calibrated_col="energy_5lagy_dc",
+            ph_smoothing_fwhm=50,
+        ))
+    return channel, channel2, channel3, channel4
 
 
 @app.cell
-def __(channel2, mo, plt):
-    # channel2.plot_hist("energy_pulse_rms", np.arange(0,10000,10))
-    channel2.dbg_plot(step_ind=1)
+def __(channel4, mo, plt):
+    channel4.dbg_plot(step_ind=5)
     mo.mpl.interactive(plt.gcf())
+    return
+
+
+@app.cell
+def __(channel4, mo, plt):
+    _result = channel4.linefit("MnKAlpha", col="energy_5lagy_dc")
+    _result.plotm()
+    mo.mpl.interactive(plt.gcf())
+    return
+
+
+@app.cell
+def __(channel4, mo, plt):
+    channel4.dbg_plot(step_ind=4)
+    mo.mpl.interactive(plt.gcf())
+    # channel4.df.columns
     return
 
 
@@ -978,14 +1028,19 @@ def __(channel3):
 def __(
     Callable,
     Filter,
+    Nothing,
+    b,
     dataclass,
     energies_out,
     filter5lag,
     filter_data_5lag,
+    m,
     massp,
     np,
     pl,
+    plot_a_vs_b_series,
     plot_hist,
+    plt,
     spectrum,
 ):
     @dataclass(frozen=True)
@@ -1019,6 +1074,35 @@ def __(
             out = self.f(*inputs_np)
             df_out = pl.DataFrame({self.output: out})
             return df_out
+
+    @dataclass(frozen=True)
+    class DriftCorrectStep(CalStep):
+        dc: Nothing
+        use_expr: pl.Expr
+
+        def calc_from_df(self, df):
+            indicator, uncorrected = self.inputs
+            df2 = df.select(
+                (pl.col(uncorrected) * (1 + m * (pl.col(indicator) - b))).
+                alias(self.output)
+            ).with_columns(df)
+            return df2
+
+        def dbg_plot(self, df):
+            indicator, uncorrected = self.inputs
+            # breakpoint()
+            df_small = df.lazy().filter(self.good_expr).filter(self.use_expr).select(self.inputs+[self.output]).collect()
+            plot_a_vs_b_series(
+                df_small[indicator], df_small[uncorrected]
+            )
+            plot_a_vs_b_series(
+                df_small[indicator],
+                df_small[self.output],
+                plt.gca(),
+            )
+            plt.legend()
+            plt.tight_layout()
+            return plt.gca()
 
 
     @dataclass(frozen=True)
@@ -1125,6 +1209,7 @@ def __(
     return (
         CalStep,
         CalSteps,
+        DriftCorrectStep,
         Filter5LagStep,
         RoughCalibrationStep,
         SummarizeStep,
