@@ -84,3 +84,23 @@ def calc_fourier_filter(avg_signal, noise_psd, dt, fmax=None, f_3db=None, peak_s
     variance = 1 / kappa
     return normalize_filter(filter), variance
 
+def filter_data_5lag(filter_values, pulses):
+    # These parameters fit a parabola to any 5 evenly-spaced points
+    fit_array = (
+        np.array(
+            ((-6, 24, 34, 24, -6), (-14, -7, 0, 7, 14), (10, -5, -10, -5, 10)),
+            dtype=float,
+        )
+        / 70.0
+    )
+    conv = np.zeros((5, pulses.shape[0]), dtype=float)
+    conv[0, :] = np.dot(pulses[:, 0:-4], filter_values)
+    conv[1, :] = np.dot(pulses[:, 1:-3], filter_values)
+    conv[2, :] = np.dot(pulses[:, 2:-2], filter_values)
+    conv[3, :] = np.dot(pulses[:, 3:-1], filter_values)
+    conv[4, :] = np.dot(pulses[:, 4:], filter_values)
+
+    param = np.dot(fit_array, conv)
+    peak_x = -0.5 * param[1, :] / param[2, :]
+    peak_y = param[0, :] - 0.25 * param[1, :] ** 2 / param[2, :]
+    return peak_x, peak_y

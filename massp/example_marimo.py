@@ -18,7 +18,7 @@ def __():
 
 
 @app.cell
-def __(massp):
+def __(massp, mo):
     noise_path = r"C:\Users\oneilg\Desktop\python\src\mass\tests\ljh_files\20230626\0000\20230626_run0000_chan4102.ljh"
     pulse_path = r"C:\Users\oneilg\Desktop\python\src\mass\tests\ljh_files\20230626\0001\20230626_run0001_chan4102.ljh"
 
@@ -26,6 +26,7 @@ def __(massp):
     df_noise, header_df_noise = ljh_noise.to_polars()
     ljh = massp.LJHFile(pulse_path)
     df, header_df = ljh.to_polars()
+    mo.stop(True)
     return (
         df,
         df_noise,
