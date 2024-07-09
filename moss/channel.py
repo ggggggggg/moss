@@ -274,3 +274,17 @@ class Channel:
         header = moss.ChannelHeader.from_ljh_header_df(header_df)
         channel = moss.Channel(df, header=header, noise=noise_channel)
         return channel
+    
+    def with_experiment_state_df(self, df_es):
+        df2 = self.df.join_asof(df_es, on="timestamp", strategy="backward")
+        return self.with_df2(df2)
+
+    def with_df2(self, df2):
+        return Channel(
+                df=df2,
+                header=self.header,
+                noise=self.noise,
+                good_expr=self.good_expr,
+                df_history=self.df_history,
+                steps=self.steps,
+            ) 

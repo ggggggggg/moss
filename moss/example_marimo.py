@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.6.26"
+__generated_with = "0.7.1"
 app = marimo.App(width="medium", app_title="MOSS intro")
 
 
@@ -48,7 +48,7 @@ def __(mo):
 
 
 @app.cell
-def __(moss, mo, pl):
+def __(mo, moss, pl):
     _root_path = r"C:\Users\oneilg\Desktop\python\src\mass\tests\ljh_files"
     _extensions = ["ljh"]
     _folders = moss.ljhutil.find_folders_with_extension(_root_path, _extensions)
@@ -75,17 +75,13 @@ def __(mo):
 
 @app.cell
 def __(noise_table, pulse_table):
-    if len(noise_table.value) == 1 and len(pulse_table.value)>=1:
+    if len(noise_table.value) == 1 and len(pulse_table.value) >= 1:
         noise_folder = noise_table.value["folder"][0]
         pulse_folders = pulse_table.value["folder"]
         pulse_folder = pulse_folders[0]
     else:
-        noise_folder = (
-            "C:\\Users\\oneilg\\Desktop\\python\\src\\mass\\tests\\ljh_files\\20230626\\0000"
-        )
-        pulse_folder = (
-            "C:\\Users\\oneilg\\Desktop\\python\\src\\mass\\tests\\ljh_files\\20230626\\0001"
-        )
+        noise_folder = "C:\\Users\\oneilg\\Desktop\\python\\src\\mass\\tests\\ljh_files\\20230626\\0000"
+        pulse_folder = "C:\\Users\\oneilg\\Desktop\\python\\src\\mass\\tests\\ljh_files\\20230626\\0001"
     return noise_folder, pulse_folder, pulse_folders
 
 
@@ -102,7 +98,9 @@ def __(mo):
 
 @app.cell
 def __(moss, noise_folder, pulse_folder):
-    data = moss.Channels.from_ljh_folder(pulse_folder=pulse_folder, noise_folder=noise_folder)
+    data = moss.Channels.from_ljh_folder(
+        pulse_folder=pulse_folder, noise_folder=noise_folder
+    )
     return data,
 
 
@@ -183,7 +181,9 @@ def __(data2, mo):
 @app.cell
 def __(data2, mo):
     _ch_nums = list(str(_ch_num) for _ch_num in data2.channels.keys())
-    dropdown_ch = mo.ui.dropdown(options=_ch_nums, value=_ch_nums[0], label="channel number")
+    dropdown_ch = mo.ui.dropdown(
+        options=_ch_nums, value=_ch_nums[0], label="channel number"
+    )
     _energy_cols = [col for col in data2.dfg().columns if col.startswith("energy")]
     _energy_cols
     dropdown_col = mo.ui.dropdown(
@@ -256,7 +256,7 @@ def __(mo):
 
 @app.cell
 def __(ch, steps):
-    step=steps[0]
+    step = steps[0]
     _ch = ch
     for step in steps:
         _ch = _ch.with_step(step)
@@ -347,9 +347,11 @@ def __(ch2):
 @app.cell
 def __(ch2, pl):
     # here we use a good_expr to drift correct over a smaller energy range
-    ch3 = ch2.driftcorrect(indicator="pretrig_mean", 
-                           uncorrected="energy_5lagy_dc", 
-                           use_expr=(2800<pl.col("energy_5lagy_dc"))&(pl.col("energy_5lagy_dc")<2850))
+    ch3 = ch2.driftcorrect(
+        indicator="pretrig_mean",
+        uncorrected="energy_5lagy_dc",
+        use_expr=(2800 < pl.col("energy_5lagy_dc")) & (pl.col("energy_5lagy_dc") < 2850),
+    )
     return ch3,
 
 
@@ -371,6 +373,53 @@ def __(ch3):
 @app.cell
 def __(ch3, mo):
     mo.md(f"{str(ch3.good_expr)=} remains unchanged")
+    return
+
+
+@app.cell
+def __(mo):
+    mo.md(
+        r"""
+        # todos!
+         * external trigger
+         * calibration plan for fitting multiple lines
+         * check accuracy of psd level and filter vdv
+         * start automated tests
+         * move drift correct into moss
+         * move fitting into moss
+        """
+    )
+    return
+
+
+@app.cell
+def __(df_es):
+    df_es
+    return
+
+
+@app.cell
+def __(ch3):
+    ch3.header.df["Filename"][0]
+    return
+
+
+@app.cell
+def __(data2, pl):
+    # due to the way timestamps were define in ljh files, we actually have a non-monotonic timestamp in channel 4109, so lets fix that, then apply the experiment state
+    # we also drop the "pulse" column here because sorting will acually copy the underlying data
+    # and we dont want to do that
+    data3 = data2.transform_channels(lambda ch: ch.with_df2(ch.df.select(pl.exclude("pulse")).sort(by="timestamp")))
+    data3 = data3.with_experiment_state_by_path()
+    return data3,
+
+
+@app.cell
+def __(data3):
+    # now lets combine the data by calling data.dfg()
+    # to get one combined dataframe from all channels
+    # and we downselect to just to columns we want for further processing
+    data3.dfg().select("timestamp","state_label", "energy_5lagy_dc")
     return
 
 

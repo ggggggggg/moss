@@ -88,3 +88,18 @@ def match_files_by_channel(folder1: str, folder2: str, limit=None) -> List[Itera
                     break
 
     return matching_pairs
+
+def experiment_state_path_from_ljh_path(ljh_path):
+    # Split the path into directory and filename
+    dir_name, file_name = os.path.split(ljh_path)
+    
+    # Split the filename into parts based on '_chan' and '.ljh'
+    base_name, _ = file_name.split('_chan')
+    
+    # Create the new filename
+    new_file_name = f"{base_name}_experiment_state.txt"
+    
+    # Join the directory and new filename to form the new path
+    experiment_state_path = os.path.join(dir_name, new_file_name)
+    
+    return experiment_state_path

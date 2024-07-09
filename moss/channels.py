@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 import polars as pl
 import pylab as plt
+import numpy as np
 import functools
 import collections
 import moss
@@ -108,3 +109,25 @@ class Channels:
             pairs = moss.ljhutil.match_files_by_channel(pulse_folder, noise_folder, limit=limit)
         description = f"from_ljh_folder {pulse_folder=} {noise_folder=}"
         return cls.from_ljh_path_pairs(pairs, description)
+    
+    def get_experiment_state_df(self, experiment_state_path=None):
+        if experiment_state_path is None:
+            first_ch = next(iter(self.channels.values()))
+            ljh_path = first_ch.header.df["Filename"][0]
+            experiment_state_path = moss.ljhutil.experiment_state_path_from_ljh_path(ljh_path)
+        _df = pl.read_csv(experiment_state_path)
+        _col0, _col1 = _df.columns
+        df_es = _df.select(pl.from_epoch(_col0, time_unit="ns").dt.cast_time_unit("us").alias("timestamp")).with_columns(
+            _df.select(pl.col(_col1).alias("state_label"))
+        )
+        return df_es
+    
+    def with_experiment_state_by_path(self, experiment_state_path=None):
+        df_es = self.get_experiment_state_df(experiment_state_path)
+        return self.with_experiment_state(df_es)
+
+    def with_experiment_state(self, df_es):
+        _channels = collections.OrderedDict()
+        for ch_num, ch in self.channels.items():
+            _channels[ch_num] = ch.with_experiment_state_df(df_es)
+        return Channels(_channels, self.description)    
