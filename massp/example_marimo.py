@@ -319,6 +319,13 @@ def __(ch2, mo, plt):
 
 
 @app.cell
+def __(ch2, mo, plt):
+    ch2.step_plot(2)
+    mo.mpl.interactive(plt.gcf())
+    return
+
+
+@app.cell
 def __(mo):
     mo.md(
         """
