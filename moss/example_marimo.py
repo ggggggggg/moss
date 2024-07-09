@@ -393,15 +393,11 @@ def __(mo):
 
 
 @app.cell
-def __(df_es):
+def __(data2):
+    # here we have a very simple experiment_state_file
+    df_es = data2.get_experiment_state_df()
     df_es
-    return
-
-
-@app.cell
-def __(ch3):
-    ch3.header.df["Filename"][0]
-    return
+    return df_es,
 
 
 @app.cell
@@ -409,7 +405,9 @@ def __(data2, pl):
     # due to the way timestamps were define in ljh files, we actually have a non-monotonic timestamp in channel 4109, so lets fix that, then apply the experiment state
     # we also drop the "pulse" column here because sorting will acually copy the underlying data
     # and we dont want to do that
-    data3 = data2.transform_channels(lambda ch: ch.with_df2(ch.df.select(pl.exclude("pulse")).sort(by="timestamp")))
+    data3 = data2.transform_channels(
+        lambda ch: ch.with_df2(ch.df.select(pl.exclude("pulse")).sort(by="timestamp"))
+    )
     data3 = data3.with_experiment_state_by_path()
     return data3,
 
@@ -419,7 +417,7 @@ def __(data3):
     # now lets combine the data by calling data.dfg()
     # to get one combined dataframe from all channels
     # and we downselect to just to columns we want for further processing
-    data3.dfg().select("timestamp","state_label", "energy_5lagy_dc")
+    data3.dfg().select("timestamp", "state_label", "energy_5lagy_dc")
     return
 
 
