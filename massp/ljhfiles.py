@@ -109,13 +109,16 @@ class LJHFile():
     def read_trace(self, i):
         return self._mmap[i]["data"]
     
-    def to_polars(self):
+    def to_polars(self, keep_posix_usec=False):
         df = pl.DataFrame({"pulse":self._mmap["data"],
                            "posix_usec":self._mmap["posix_usec"],
                            "rowcount":self._mmap["rowcount"]},
                            schema={"pulse":pl.Array(pl.UInt16, self.nSamples),
                                    "posix_usec":pl.UInt64,
                                    "rowcount":pl.UInt64})
+        df = df.select(pl.from_epoch("posix_usec", time_unit="us").alias("timestamp")).with_columns(df)
+        if not keep_posix_usec:
+            df = df.select(pl.exclude("posix_usec"))
         header_df = pl.DataFrame(self.header_dict)
         return df, header_df
 

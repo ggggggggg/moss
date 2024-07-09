@@ -102,7 +102,7 @@ class Channel:
             df=df2,
             header=self.header,
             noise=self.noise,
-            good_expr=self.good_expr,
+            good_expr=step.good_expr,
             df_history=self.df_history + [self.df],
             steps=self.steps.with_step(step),
             steps_elapsed_s=self.steps_elapsed_s + [elapsed_s],
@@ -264,13 +264,13 @@ class Channel:
         return id(self) == id(other)
 
     @classmethod
-    def from_ljh(cls, path, noise_path=None):
+    def from_ljh(cls, path, noise_path=None, keep_posix_usec=False):
         if noise_path is None:
             noise_channel = None
         else:
             noise_channel = massp.NoiseChannel.from_ljh(noise_path)
         ljh = massp.LJHFile(path)
-        df, header_df = ljh.to_polars()
+        df, header_df = ljh.to_polars(keep_posix_usec)
         header = massp.ChannelHeader.from_ljh_header_df(header_df)
         channel = massp.Channel(df, header=header, noise=noise_channel)
         return channel

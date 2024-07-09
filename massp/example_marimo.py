@@ -202,14 +202,6 @@ def __(data2, dropdown_ch, dropdown_col, mo, plt):
     _ch_num, _col = int(dropdown_ch.value), dropdown_col.value
     _ch = data2.channels[int(_ch_num)]
     result = _ch.linefit("MnKAlpha", col=_col)
-    result.set_label_hints(
-        binsize=0.5,
-        ds_shortname=_ch.header.description,
-        unit_str="eV",
-        attr_str=_col,
-        states_hint=f"{_ch.good_expr}",
-        cut_hint=f"",
-    )
     result.plotm()
     plt.title(f"reative plot of {_ch_num=} and {_col=} for you")
     mo.mpl.interactive(plt.gcf())
@@ -323,6 +315,55 @@ def __(ch2, mo, plt):
 def __(ch2, mo, plt):
     ch2.step_plot(5)
     mo.mpl.interactive(plt.gcf())
+    return
+
+
+@app.cell
+def __(mo):
+    mo.md(
+        """
+        # cuts? good_expr and use_expr
+        We're using polars expressions in place of cuts. Each `Channel` can work with two of these, `good_expr` which is intended to isolate clean pulses that will yield good resolution, and `use_expr` which is intended to time slice to seperate out different states of the experiment. However, there is nothing binding these behaviors.
+
+        `good_expr` is stored in the `Channel` and use automatically in many functions, including plots. `use_expr` is passed on a per function basis, and is not generally stored, although some steps will store the `use_expr` provided during that step. Many functions have something like `plot(df.filter(good_expr).filter(use_expr))` in them.
+        """
+    )
+    return
+
+
+@app.cell
+def __(ch2):
+    ch2.good_expr
+    return
+
+
+@app.cell
+def __(ch2, pl):
+    # here we use a good_expr to drift correct over a smaller energy range
+    ch3 = ch2.driftcorrect(indicator="pretrig_mean", 
+                           uncorrected="energy_5lagy_dc", 
+                           use_expr=(2800<pl.col("energy_5lagy_dc"))&(pl.col("energy_5lagy_dc")<2850))
+    return ch3,
+
+
+@app.cell
+def __(ch3, mo, plt):
+    # here we make the debug plot for that last step, and see that it has stored the use_expr and used it for its plot
+    # we can see that this line has a non-optimal drift correction when learning from the full energy range, but is improved when we learn just from it's energy range
+    ch3.step_plot(6)
+    mo.mpl.interactive(plt.gcf())
+    return
+
+
+@app.cell
+def __(ch3):
+    ch3.steps[6].use_expr
+    return
+
+
+@app.cell
+def __(ch3, mo):
+    mo.md(f"{str(ch3.good_expr)=} remains unchanged")
     return
 
 

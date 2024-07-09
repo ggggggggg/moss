@@ -7,6 +7,7 @@ import typing
 import numpy as np
 import massp
 
+
 @dataclass(frozen=True)
 class CalStep:
     inputs: list[str]
