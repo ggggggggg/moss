@@ -3,8 +3,8 @@ from dataclasses import dataclass, field
 import polars as pl
 import pylab as plt
 import functools
-import massp
-from massp import NoiseChannel, CalSteps, CalStep, DriftCorrectStep, RoughCalibrationStep, SummarizeStep, Filter5LagStep
+import moss
+from moss import NoiseChannel, CalSteps, CalStep, DriftCorrectStep, RoughCalibrationStep, SummarizeStep, Filter5LagStep
 import typing
 import numpy as np
 import time
@@ -110,10 +110,10 @@ class Channel:
         return ch2
 
     def with_good_expr_pretrig_mean_and_postpeak_deriv(self):
-        max_postpeak_deriv = massp.misc.outlier_resistant_nsigma_above_mid(
+        max_postpeak_deriv = moss.misc.outlier_resistant_nsigma_above_mid(
             self.df["postpeak_deriv"].to_numpy(), nsigma=20
         )
-        max_pretrig_rms = massp.misc.outlier_resistant_nsigma_above_mid(
+        max_pretrig_rms = moss.misc.outlier_resistant_nsigma_above_mid(
             self.df["pretrig_rms"].to_numpy(), nsigma=20
         )
         good_expr = (pl.col("postpeak_deriv") < max_postpeak_deriv).and_(
@@ -165,7 +165,7 @@ class Channel:
             .mean(axis=0)
         )
         spectrum5lag = self.noise.spectrum(trunc_front=2, trunc_back=2)
-        filter5lag = massp.fourier_filter(
+        filter5lag = moss.fourier_filter(
             avg_signal=avg_pulse[2:-2],
             noise_psd=spectrum5lag.psd,
             dt=self.header.frametime_s,
@@ -198,7 +198,7 @@ class Channel:
             .select([indicator, uncorrected])
             .collect()
         )
-        dc = massp.drift_correct(
+        dc = moss.drift_correct(
             indicator=df_dc[indicator].to_numpy(),
             uncorrected=df_dc[uncorrected].to_numpy(),
         )
@@ -229,7 +229,7 @@ class Channel:
         df_small = (
             self.df.lazy().filter(self.good_expr).filter(use_expr).select(col).collect()
         )
-        bin_centers, counts = massp.misc.hist_of_series(df_small[col], _bin_edges)
+        bin_centers, counts = moss.misc.hist_of_series(df_small[col], _bin_edges)
         params = model.guess(counts, bin_centers=bin_centers, dph_de=1)
         params["dph_de"].set(1.0, vary=False)
         result = model.fit(
@@ -268,9 +268,9 @@ class Channel:
         if noise_path is None:
             noise_channel = None
         else:
-            noise_channel = massp.NoiseChannel.from_ljh(noise_path)
-        ljh = massp.LJHFile(path)
+            noise_channel = moss.NoiseChannel.from_ljh(noise_path)
+        ljh = moss.LJHFile(path)
         df, header_df = ljh.to_polars(keep_posix_usec)
-        header = massp.ChannelHeader.from_ljh_header_df(header_df)
-        channel = massp.Channel(df, header=header, noise=noise_channel)
+        header = moss.ChannelHeader.from_ljh_header_df(header_df)
+        channel = moss.Channel(df, header=header, noise=noise_channel)
         return channel

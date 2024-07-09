@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 import polars as pl
 import pylab as plt
 import functools
-import massp
+import moss
 import numpy as np
 
 @dataclass(frozen=True)
@@ -19,7 +19,7 @@ class NoiseChannel:
             return np.amax(noise_trace, axis=1) - np.amin(noise_trace, axis=1)
         noise_traces = self.df.limit(n_limit)[trace_col_name].to_numpy()
         excursion = excursion2d(noise_traces)
-        max_excursion = massp.misc.outlier_resistant_nsigma_above_mid(
+        max_excursion = moss.misc.outlier_resistant_nsigma_above_mid(
             excursion, nsigma=excursion_nsigma
         )
         df_noise2 = self.df.with_columns(excursion=excursion)
@@ -48,7 +48,7 @@ class NoiseChannel:
             noise_traces_clean2 = noise_traces_clean[:, trunc_front:-trunc_back]
         else:
             raise ValueError(f"trunc_back must be >= 0")
-        spectrum = massp.noise_psd(noise_traces_clean2, dt=self.frametime_s)
+        spectrum = moss.noise_psd(noise_traces_clean2, dt=self.frametime_s)
         return spectrum
 
     def __hash__(self):
@@ -62,7 +62,7 @@ class NoiseChannel:
 
     @classmethod
     def from_ljh(cls, path):
-        ljh = massp.LJHFile(path)
+        ljh = moss.LJHFile(path)
         df, header_df = ljh.to_polars()
         noise_channel = cls(df, header_df, header_df["Timebase"][0])
         return noise_channel

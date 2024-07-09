@@ -29,8 +29,8 @@ def __():
 
 @app.cell
 def __():
-    import massp
-    return massp,
+    import moss
+    return moss,
 
 
 @app.cell(disabled=True)
@@ -48,10 +48,10 @@ def __(mo):
 
 
 @app.cell
-def __(massp, mo, pl):
+def __(moss, mo, pl):
     _root_path = r"C:\Users\oneilg\Desktop\python\src\mass\tests\ljh_files"
     _extensions = ["ljh"]
-    _folders = massp.ljhutil.find_folders_with_extension(_root_path, _extensions)
+    _folders = moss.ljhutil.find_folders_with_extension(_root_path, _extensions)
     _df = pl.DataFrame({"folder": _folders})
     pulse_table = mo.ui.table(_df, label="puck pulse files")
     noise_table = mo.ui.table(_df, label="pick noise file", selection="single")
@@ -101,8 +101,8 @@ def __(mo):
 
 
 @app.cell
-def __(massp, noise_folder, pulse_folder):
-    data = massp.Channels.from_ljh_folder(pulse_folder=pulse_folder, noise_folder=noise_folder)
+def __(moss, noise_folder, pulse_folder):
+    data = moss.Channels.from_ljh_folder(pulse_folder=pulse_folder, noise_folder=noise_folder)
     return data,
 
 

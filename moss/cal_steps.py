@@ -5,7 +5,7 @@ import pylab as plt
 import functools
 import typing
 import numpy as np
-import massp
+import moss
 
 
 @dataclass(frozen=True)
@@ -64,8 +64,8 @@ class DriftCorrectStep(CalStep):
             .select(self.inputs + [self.output])
             .collect()
         )
-        massp.misc.plot_a_vs_b_series(df_small[indicator], df_small[uncorrected])
-        massp.misc.plot_a_vs_b_series(
+        moss.misc.plot_a_vs_b_series(df_small[indicator], df_small[uncorrected])
+        moss.misc.plot_a_vs_b_series(
             df_small[indicator],
             df_small[self.output],
             plt.gca(),
@@ -88,7 +88,7 @@ class RoughCalibrationStep(CalStep):
             .select(pl.col(self.output))
             .collect()[self.output]
         )
-        axis = massp.misc.plot_hist_of_series(series, bin_edges)
+        axis = moss.misc.plot_hist_of_series(series, bin_edges)
         axis.plot(self.line_energies, np.zeros(len(self.line_energies)), "o")
         for line_name, energy in zip(self.line_names, self.line_energies):
             axis.annotate(line_name, (energy, 0), rotation=90)
@@ -109,7 +109,7 @@ class SummarizeStep(CalStep):
     def calc_from_df(self, df):
         df2 = pl.concat(
             pl.from_numpy(
-                massp.pulse_algorithms.summarize_data_numba(
+                moss.pulse_algorithms.summarize_data_numba(
                     df_iter[self.pulse_col].to_numpy(),
                     self.frametime_s,
                     peak_samplenumber=self.peak_index,
@@ -124,14 +124,14 @@ class SummarizeStep(CalStep):
 
 @dataclass(frozen=True)
 class Filter5LagStep(CalStep):
-    filter: massp.Filter
-    spectrum: massp.NoisePSD
+    filter: moss.Filter
+    spectrum: moss.NoisePSD
     use_expr: pl.Expr
 
     def calc_from_df(self, df):
         dfs = []
         for df_iter in df.iter_slices(10000):
-            peak_x, peak_y = massp.filters.filter_data_5lag(
+            peak_x, peak_y = moss.filters.filter_data_5lag(
                 self.filter.filter, df_iter[self.inputs[0]].to_numpy()
             )
             dfs.append(pl.DataFrame({"peak_x": peak_x, "peak_y": peak_y}))

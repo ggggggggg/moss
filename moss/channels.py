@@ -3,11 +3,11 @@ import polars as pl
 import pylab as plt
 import functools
 import collections
-import massp
+import moss
 
 @dataclass(frozen=True)
 class Channels:
-    channels: collections.OrderedDict[int, massp.Channel]
+    channels: collections.OrderedDict[int, moss.Channel]
     description: str
 
     @functools.cache
@@ -42,7 +42,7 @@ class Channels:
         pe = model.spect.peak_energy
         _bin_edges = np.arange(pe - dlo, pe + dhi, binsize)
         df_small = self.dfg().lazy().filter(use_expr).select(col).collect()
-        bin_centers, counts = massp.misc.hist_of_series(df_small[col], _bin_edges)
+        bin_centers, counts = moss.misc.hist_of_series(df_small[col], _bin_edges)
         params = model.guess(counts, bin_centers=bin_centers, dph_de=1)
         params["dph_de"].set(1.0, vary=False)
         result = model.fit(
@@ -95,16 +95,16 @@ class Channels:
     def from_ljh_path_pairs(cls, pulse_noise_pairs, description):
         _channels = collections.OrderedDict()
         for pulse_path, noise_path in pulse_noise_pairs:
-            channel = massp.Channel.from_ljh(pulse_path, noise_path)
+            channel = moss.Channel.from_ljh(pulse_path, noise_path)
             _channels[channel.header.ch_num] = channel
         return cls(_channels, description)
 
     @classmethod
     def from_ljh_folder(cls, pulse_folder, noise_folder=None, limit=None):
         if noise_folder is None:
-            paths = massp.ljhutil.find_ljh_files(pulse_folder)
+            paths = moss.ljhutil.find_ljh_files(pulse_folder)
             pairs = ((path, None) for path in paths)
         else:
-            pairs = massp.ljhutil.match_files_by_channel(pulse_folder, noise_folder, limit=limit)
+            pairs = moss.ljhutil.match_files_by_channel(pulse_folder, noise_folder, limit=limit)
         description = f"from_ljh_folder {pulse_folder=} {noise_folder=}"
         return cls.from_ljh_path_pairs(pairs, description)

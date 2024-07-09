@@ -1,9 +1,9 @@
 [project]
-name = "massp"
-description = "massp example package"
+name = "moss"
+description = "moss example package"
 version = "0.1.0"
 authors = [
-    { name = "S", email = "s@massp.com" }
+    { name = "S", email = "s@moss.com" }
 ]
 dependencies = [
     "polars",

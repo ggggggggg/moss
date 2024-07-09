@@ -1,12 +1,12 @@
 import marimo
 
 __generated_with = "0.6.26"
-app = marimo.App(width="medium", app_title="Massp Example")
+app = marimo.App(width="medium", app_title="moss Example")
 
 
 @app.cell
 def __():
-    import massp
+    import moss
     import polars as pl
     import pylab as plt
     import numpy as np
@@ -14,17 +14,17 @@ def __():
     import time
     import collections
     import joblib
-    return collections, joblib, massp, mo, np, pl, plt, time
+    return collections, joblib, moss, mo, np, pl, plt, time
 
 
 @app.cell
-def __(massp, mo):
+def __(moss, mo):
     noise_path = r"C:\Users\oneilg\Desktop\python\src\mass\tests\ljh_files\20230626\0000\20230626_run0000_chan4102.ljh"
     pulse_path = r"C:\Users\oneilg\Desktop\python\src\mass\tests\ljh_files\20230626\0001\20230626_run0001_chan4102.ljh"
 
-    ljh_noise = massp.LJHFile(noise_path)
+    ljh_noise = moss.LJHFile(noise_path)
     df_noise, header_df_noise = ljh_noise.to_polars()
-    ljh = massp.LJHFile(pulse_path)
+    ljh = moss.LJHFile(pulse_path)
     df, header_df = ljh.to_polars()
     mo.stop(True)
     return (
@@ -73,10 +73,10 @@ def __(df, pl):
 
 
 @app.cell
-def __(df, df2, header_df, massp, mo, peak_ind, pl):
+def __(df, df2, header_df, moss, mo, peak_ind, pl):
     df3 = pl.concat(
         pl.from_numpy(
-            massp.pulse_algorithms.summarize_data_numba(
+            moss.pulse_algorithms.summarize_data_numba(
                 df_iter["pulse"].to_numpy(),
                 header_df["Timebase"][0],
                 peak_samplenumber=peak_ind,
@@ -166,8 +166,8 @@ def __(noise_data):
 
 
 @app.cell
-def __(header_df, massp, noise_data):
-    spectrum = massp.noise_psd(noise_data, dt=header_df["Timebase"][0])
+def __(header_df, moss, noise_data):
+    spectrum = moss.noise_psd(noise_data, dt=header_df["Timebase"][0])
     return spectrum,
 
 
@@ -238,8 +238,8 @@ def __(avg_pulse, df_bad, df_bad_pretrig, df_good, mo, plt):
 
 
 @app.cell
-def __(avg_pulse, header_df, massp, mo, plt, spectrum):
-    filter = massp.fourier_filter(
+def __(avg_pulse, header_df, moss, mo, plt, spectrum):
+    filter = moss.fourier_filter(
         avg_signal=avg_pulse, noise_psd=spectrum.psd, dt=header_df["Timebase"][0]
     )
     # filter.filter-=np.mean(filter.filter)
@@ -341,9 +341,9 @@ def __(mo):
 
 
 @app.cell
-def __(df4, good_expr, massp):
+def __(df4, good_expr, moss):
     df_dc = df4.filter(good_expr).select("pretrig_mean", "filt_value")
-    dc = massp.drift_correct(
+    dc = moss.drift_correct(
         indicator=df_dc["pretrig_mean"].to_numpy(),
         uncorrected=df_dc["filt_value"].to_numpy(),
     )
@@ -454,9 +454,9 @@ def __(np):
 
 
 @app.cell
-def __(avg_pulse, header_df, massp, noise_data):
-    spectrum5lag = massp.noise_psd(noise_data[:, 2:-2], dt=header_df["Timebase"][0])
-    filter5lag = massp.fourier_filter(
+def __(avg_pulse, header_df, moss, noise_data):
+    spectrum5lag = moss.noise_psd(noise_data[:, 2:-2], dt=header_df["Timebase"][0])
+    filter5lag = moss.fourier_filter(
         avg_signal=avg_pulse[2:-2],
         noise_psd=spectrum5lag.psd,
         dt=header_df["Timebase"][0],
@@ -503,8 +503,8 @@ def __(filter, filter5lag, mo, plt):
 
 
 @app.cell
-def __(b, df6, m, massp, pl):
-    _dc = massp.drift_correct(
+def __(b, df6, m, moss, pl):
+    _dc = moss.drift_correct(
         indicator=df6["pretrig_mean"].to_numpy(),
         uncorrected=df6["peak_y"].to_numpy(),
     )
@@ -669,7 +669,7 @@ def __(
     df_noise,
     excursion2d,
     functools,
-    massp,
+    moss,
     outlier_resistant_nsigma_above_mid,
     pl,
 ):
@@ -714,7 +714,7 @@ def __(
                 noise_traces_clean2 = noise_traces_clean[:, trunc_front:-trunc_back]
             else:
                 raise ValueError(f"trunc_back must be >= 0")
-            spectrum = massp.noise_psd(noise_traces_clean2, dt=self.frametime_s)
+            spectrum = moss.noise_psd(noise_traces_clean2, dt=self.frametime_s)
             return spectrum
 
         def __hash__(self):
@@ -769,7 +769,7 @@ def __(
     field,
     histo,
     mass,
-    massp,
+    moss,
     np,
     outlier_resistant_nsigma_above_mid,
     peak_ind,
@@ -907,7 +907,7 @@ def __(
                 .mean(axis=0)
             )
             spectrum5lag = self.noise.spectrum(trunc_front=2, trunc_back=2)
-            filter5lag = massp.fourier_filter(
+            filter5lag = moss.fourier_filter(
                 avg_signal=avg_pulse[2:-2],
                 noise_psd=spectrum5lag.psd,
                 dt=self.header.frametime_s,
@@ -940,7 +940,7 @@ def __(
                 .select([indicator, uncorrected])
                 .collect()
             )
-            dc = massp.drift_correct(
+            dc = moss.drift_correct(
                 indicator=df_dc[indicator].to_numpy(),
                 uncorrected=df_dc[uncorrected].to_numpy(),
             )
@@ -1085,7 +1085,7 @@ def __(
     filter5lag,
     filter_data_5lag,
     m,
-    massp,
+    moss,
     np,
     pl,
     plot_a_vs_b_series,
@@ -1192,7 +1192,7 @@ def __(
         def calc_from_df(self, df):
             df2 = pl.concat(
                 pl.from_numpy(
-                    massp.pulse_algorithms.summarize_data_numba(
+                    moss.pulse_algorithms.summarize_data_numba(
                         df_iter[self.pulse_col].to_numpy(),
                         self.frametime_s,
                         peak_samplenumber=self.peak_index,
