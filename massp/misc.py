@@ -1,4 +1,5 @@
 import numpy as np
+import pylab as plt
 
 def median_absolute_deviation(x):
     return np.median(np.abs(x - np.median(x)))
@@ -26,3 +27,24 @@ def hist_of_series(series, bin_edges):
         bin_edges, include_category=False, include_breakpoint=False
     )[1:-1]
     return bin_centers, counts.to_numpy().T[0]
+
+def plot_hist_of_series(series, bin_edges, axis=None, **plotkwarg):
+    if axis is None:
+        plt.figure()
+        axis = plt.gca()
+    bin_centers, step_size = midpoints_and_step_size(bin_edges)
+    hist = series.rename("count").hist(
+        bin_edges, include_category=False, include_breakpoint=False
+    )[1:-1]
+    axis.plot(bin_centers, hist, label=series.name, **plotkwarg)
+    axis.set_xlabel(series.name)
+    axis.set_ylabel(f"counts per {step_size:.2f} unit bin")
+    return axis
+
+def plot_a_vs_b_series(a, b, axis=None, **plotkwarg):
+    if axis is None:
+        plt.figure()
+        axis = plt.gca()
+    axis.plot(a, b, ".", label=b.name, **plotkwarg)
+    axis.set_xlabel(a.name)
+    axis.set_ylabel(b.name)

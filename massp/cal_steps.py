@@ -63,8 +63,8 @@ class DriftCorrectStep(CalStep):
             .select(self.inputs + [self.output])
             .collect()
         )
-        plot_a_vs_b_series(df_small[indicator], df_small[uncorrected])
-        plot_a_vs_b_series(
+        massp.misc.plot_a_vs_b_series(df_small[indicator], df_small[uncorrected])
+        massp.misc.plot_a_vs_b_series(
             df_small[indicator],
             df_small[self.output],
             plt.gca(),
@@ -77,8 +77,8 @@ class DriftCorrectStep(CalStep):
 @dataclass(frozen=True)
 class RoughCalibrationStep(CalStep):
     line_names: list[str]
-    energies: np.ndarray
-    energy_residuals: np.ndarray
+    line_energies: np.ndarray
+    predicted_energies: np.ndarray
 
     def dbg_plot(self, df, bin_edges=np.arange(0, 10000, 1), axis=None, plotkwarg={}):
         series = (
@@ -87,12 +87,13 @@ class RoughCalibrationStep(CalStep):
             .select(pl.col(self.output))
             .collect()[self.output]
         )
-        axis = plot_hist(series, bin_edges)
-        axis.plot(self.energies, np.zeros(len(energies_out)), "o")
-        for line_name, energy in zip(self.line_names, self.energies):
+        axis = massp.misc.plot_hist_of_series(series, bin_edges)
+        axis.plot(self.line_energies, np.zeros(len(self.line_energies)), "o")
+        for line_name, energy in zip(self.line_names, self.line_energies):
             axis.annotate(line_name, (energy, 0), rotation=90)
         np.set_printoptions(precision=2)
-        axis.set_title(f"RoughCalibrationStep dbg_plot\n{self.energy_residuals=}")
+        energy_residuals = self.predicted_energies-self.line_energies
+        axis.set_title(f"RoughCalibrationStep dbg_plot\n{energy_residuals=}")
         return axis
 
 

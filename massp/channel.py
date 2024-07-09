@@ -42,7 +42,7 @@ class Channel:
     steps: CalSteps = field(default_factory=CalSteps.new_empty)
     steps_elapsed_s: list[float] = field(default_factory=list)
 
-    def dbg_plot(self, step_ind):
+    def step_plot(self, step_ind):
         step = self.steps[step_ind]
         if step_ind + 1 == len(self.df_history):
             df_after = self.df
@@ -80,7 +80,7 @@ class Channel:
             return calibrated
 
         predicted_energies = rough_cal_f(np.array(opt_assignments))
-        energy_residuals = predicted_energies - energies_out
+        # energy_residuals = predicted_energies - energies_out
         # if any(np.abs(energy_residuals) > max_residual_ev):
         #     raise Exception(f"too large residuals: {energy_residuals=} eV")
         step = RoughCalibrationStep(
@@ -88,9 +88,9 @@ class Channel:
             calibrated_col,
             self.good_expr,
             rough_cal_f,
-            name_e,
-            energies_out,
-            energy_residuals,
+            line_names=name_e,
+            line_energies=energies_out,
+            predicted_energies=predicted_energies,
         )
         return self.with_step(step)
 

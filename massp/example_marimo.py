@@ -1,7 +1,7 @@
 import marimo
 
 __generated_with = "0.6.26"
-app = marimo.App(width="medium", app_title="Massp2")
+app = marimo.App(width="medium", app_title="MOSS intro")
 
 
 @app.cell
@@ -67,7 +67,7 @@ def __(mo):
     mo.md(
         """
         # file picker overide
-        below here we manually define some default ljh files for this notebook to work on, but if you use the file picker it will override the default values. 
+        below here we manually define some default ljh files for this notebook to work on, but if you use the file picker it will override the default values.
         """
     )
     return
@@ -150,7 +150,7 @@ def __(data):
     return data2,
 
 
-@app.cell
+@app.cell(hide_code=True)
 def __(mo):
     mo.md(
         f"""
@@ -191,7 +191,7 @@ def __(data2, mo):
     )
     mo.md(
         f"""MOSS has some convenient fitting and plotting methods. We can combine them with marimo's super easy ui element to pick a channel number {dropdown_ch} and an energy column name {dropdown_col}. we can use it to make plots!
-        
+
         MOSS fitters are based on the best avaialble spectral shap in the literature, and the fwhm resolution value refers to only the detector portion of the resolution."""
     )
     return dropdown_ch, dropdown_col
@@ -200,9 +200,25 @@ def __(data2, mo):
 @app.cell
 def __(data2, dropdown_ch, dropdown_col, mo, plt):
     _ch_num, _col = int(dropdown_ch.value), dropdown_col.value
-    data2.channels[int(_ch_num)].linefit("MnKAlpha", col=_col).plotm()
+    _ch = data2.channels[int(_ch_num)]
+    result = _ch.linefit("MnKAlpha", col=_col)
+    result.set_label_hints(
+        binsize=0.5,
+        ds_shortname=_ch.header.description,
+        unit_str="eV",
+        attr_str=_col,
+        states_hint=f"{_ch.good_expr}",
+        cut_hint=f"",
+    )
+    result.plotm()
     plt.title(f"reative plot of {_ch_num=} and {_col=} for you")
     mo.mpl.interactive(plt.gcf())
+    return result,
+
+
+@app.cell
+def __(result):
+    result.fit_report()
     return
 
 
@@ -240,7 +256,7 @@ def __(mo):
         # apply steps
         marimo has an outline feature look on the left for the scroll looking icon, and click on it. You can navigate around this notebook with it!
 
-        below we apply all the steps that were saved in data2 to our orignial channel, which recall was saved in `data`. 
+        below we apply all the steps that were saved in data2 to our orignial channel, which recall was saved in `data`.
         """
     )
     return
@@ -282,11 +298,31 @@ def __(data, data2, mo, np):
         f"""
         # don't worry about all the copies
         we are copying dataframes, but we aren't copying the underlying memory, so our memory usage is about the same as it would be if we used a mutating style of coding.
-        
+
         `{np.shares_memory(data.channels[4102].df["rowcount"].to_numpy(), data2.channels[4102].df["rowcount"].to_numpy())=}`
         `{np.shares_memory(data.channels[4102].df["pulse"].to_numpy(), data2.channels[4102].df["pulse"].to_numpy())=}`
         """
     )
+    return
+
+
+@app.cell
+def __(mo):
+    mo.md("# step plots")
+    return
+
+
+@app.cell
+def __(ch2, mo, plt):
+    ch2.step_plot(4)
+    mo.mpl.interactive(plt.gcf())
+    return
+
+
+@app.cell
+def __(ch2, mo, plt):
+    ch2.step_plot(5)
+    mo.mpl.interactive(plt.gcf())
     return
 
 
