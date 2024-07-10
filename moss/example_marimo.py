@@ -350,7 +350,7 @@ def __(ch2, pl):
     ch3 = ch2.driftcorrect(
         indicator="pretrig_mean",
         uncorrected="energy_5lagy_dc",
-        use_expr=(2800 < pl.col("energy_5lagy_dc")) & (pl.col("energy_5lagy_dc") < 2850),
+        use_expr=(pl.col("energy_5lagy_dc").is_between(2800,2850)),
     )
     return ch3,
 
@@ -581,6 +581,14 @@ def __(fits_with_results, mo, plt):
     fits_with_results.plot_results()
     mo.mpl.interactive(plt.gcf())
     return
+
+
+@app.cell
+def __(fits_with_results):
+    mn_result, cu_result, pd_result = fits_with_results.results
+    assert mn_result.params["fwhm"].value < 3.34
+    assert cu_result.params["fwhm"].value < 3.34
+    return cu_result, mn_result, pd_result
 
 
 @app.cell
