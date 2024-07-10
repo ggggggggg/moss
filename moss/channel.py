@@ -51,7 +51,12 @@ class Channel:
         return step.dbg_plot(df_after)
 
     def plot_hist(self, col, bin_edges, axis=None):
-        return plot_hist(self.df[col], bin_edges, axis)
+        return moss.misc.plot_hist_of_series(self.df[col], bin_edges, axis)
+    
+    def multifit_cal(self, fitspecs, rough_cal_ind):
+        rough_cal_step = self.steps[rough_cal_ind]
+        return None
+
 
     def rough_cal(
         self, line_names, uncalibrated_col, calibrated_col, ph_smoothing_fwhm
@@ -73,10 +78,10 @@ class Channel:
             maxacc=0.1,
         )
         gain = opt_assignments / energies_out
-        pfit_gain = np.polynomial.Polynomial.fit(opt_assignments, gain, deg=2)
+        gain_pfit = np.polynomial.Polynomial.fit(opt_assignments, gain, deg=2)
 
         def rough_cal_f(uncalibrated):
-            calibrated = uncalibrated / pfit_gain(uncalibrated)
+            calibrated = uncalibrated / gain_pfit(uncalibrated)
             return calibrated
 
         predicted_energies = rough_cal_f(np.array(opt_assignments))
@@ -91,6 +96,7 @@ class Channel:
             line_names=name_e,
             line_energies=energies_out,
             predicted_energies=predicted_energies,
+            gain_pfit = gain_pfit
         )
         return self.with_step(step)
 

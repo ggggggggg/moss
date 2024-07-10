@@ -377,22 +377,6 @@ def __(ch3, mo):
 
 
 @app.cell
-def __(mo):
-    mo.md(
-        r"""
-        # todos!
-         * external trigger
-         * calibration plan for fitting multiple lines
-         * check accuracy of psd level and filter vdv
-         * start automated tests
-         * move drift correct into moss
-         * move fitting into moss
-        """
-    )
-    return
-
-
-@app.cell
 def __(data2):
     # here we have a very simple experiment_state_file
     df_es = data2.get_experiment_state_df()
@@ -417,7 +401,182 @@ def __(data3):
     # now lets combine the data by calling data.dfg()
     # to get one combined dataframe from all channels
     # and we downselect to just to columns we want for further processing
-    data3.dfg().select("timestamp", "state_label", "energy_5lagy_dc")
+    dfg = data3.dfg().select("timestamp", "energy_5lagy_dc", "state_label", "ch_num")
+    dfg
+    return dfg,
+
+
+@app.cell
+def __():
+    return
+
+
+@app.cell
+def __(mo):
+    mo.md(
+        r"""
+        # todos!
+         * external trigger
+         * calibration plan for fitting multiple lines
+         * check accuracy of psd level and filter vdv
+         * start automated tests
+         * move drift correct into moss
+         * move fitting into moss
+        """
+    )
+    return
+
+
+@app.cell
+def __(mo):
+    mo.md(r"# fine calibration")
+    return
+
+
+@app.cell
+def __(Optional, moss, np, numpy, pl, plt):
+    from dataclasses import dataclass, field
+    import mass
+    import lmfit
+    import copy
+    import math
+
+
+    def handle_none(val, default):
+        if val is None:
+            return copy.copy(default)
+        return val
+
+
+    @dataclass(frozen=True)
+    class FitSpec:
+        model: mass.GenericLineModel
+        bin_edges: numpy.ndarray
+        use_expr: pl.Expr
+        params_update: lmfit.parameter.Parameters
+
+        def params(self):
+            params = self.model.make_params()
+            params["dph_de"].set(1.0, vary=False)
+            params = params.update(self.params_update)
+            return params
+
+        def fit_series(self, series):
+            bin_centers, counts = moss.misc.hist_of_series(series, self.bin_edges)
+            params = self.params()
+            bin_centers, bin_size = moss.misc.midpoints_and_step_size(self.bin_edges)
+            result = self.model.fit(counts, params, bin_centers=bin_centers)
+            result.set_label_hints(
+                binsize=bin_size,
+                ds_shortname="??",
+                unit_str="eV",
+                attr_str=series.name,
+                states_hint=f"{self.use_expr}",
+                cut_hint=f"",
+            )
+            return result
+
+
+    @dataclass(frozen=True)
+    class MultiFit:
+        default_d: float = 50
+        default_bin_size: float = 0.5
+        default_use_expr: bool = True
+        default_params_update: dict = field(default_factory=lmfit.Parameters)
+        fitspecs: list[FitSpec] = field(default_factory=list)
+        results: Optional[list] = None
+
+        def with_line(
+            self, line, dlo=None, dhi=None, bin_size=None, use_expr=None, params_update=None
+        ):
+            model = mass.getmodel(line)
+            peak_energy = model.spect.peak_energy
+            dlo = handle_none(dlo, self.default_d)
+            dhi = handle_none(dhi, self.default_d)
+            bin_size = handle_none(bin_size, self.default_bin_size)
+            params_update = handle_none(params_update, self.default_params_update)
+            use_expr = handle_none(use_expr, self.default_use_expr)
+            bin_edges = np.arange(-dlo, dhi + bin_size, bin_size) + peak_energy
+            fitspec = FitSpec(model, bin_edges, use_expr, params_update)
+            return self.with_fitspec(fitspec)
+
+        def with_fitspec(self, fitspec):
+            return MultiFit(
+                self.default_d,
+                self.default_bin_size,
+                self.default_use_expr,
+                self.default_params_update,
+                self.fitspecs + [fitspec],
+                self.results,
+            )
+
+        def with_results(self, results):
+            return MultiFit(
+                self.default_d,
+                self.default_bin_size,
+                self.default_use_expr,
+                self.default_params_update,
+                self.fitspecs,
+                results,
+            )
+
+        def fit_series(self, series):
+            results = [fitspec.fit_series(series) for fitspec in self.fitspecs]
+            return self.with_results(results)
+
+        def plot_results(self):
+            n = len(self.results)
+            cols = min(3, n)
+            rows = math.ceil(n / cols)
+            fig, axes = plt.subplots(rows, cols, figsize=(cols*4, rows*4))  # Adjust figure size as needed
+            
+            # If there's only one subplot, axes is not a list but a single Axes object.
+            if rows == 1 and cols == 1:
+                axes = [axes]
+            elif rows == 1 or cols == 1:
+                axes = axes.flatten()
+            else:
+                axes = axes.ravel()
+            
+            for result, ax in zip(self.results, axes):
+                result.plotm(ax=ax)
+            
+            # Hide any remaining empty subplots
+            for ax in axes[len(self.results):]:
+                ax.axis('off')
+            
+            plt.tight_layout()
+            return fig, axes
+    return (
+        FitSpec,
+        MultiFit,
+        copy,
+        dataclass,
+        field,
+        handle_none,
+        lmfit,
+        mass,
+        math,
+    )
+
+
+@app.cell
+def __(MultiFit):
+    fits = MultiFit(default_d=40, default_bin_size=0.6)
+    fits = fits.with_line("MnKAlpha").with_line("CuKAlpha").with_line("PdLAlpha")
+    return fits,
+
+
+@app.cell
+def __(data3, fits):
+    fits_with_results = fits.fit_series(data3.channels[4102].df["energy_5lagy_dc"])
+    return fits_with_results,
+
+
+@app.cell
+def __(fits_with_results, mo, plt):
+    fits_with_results.plot_results()
+    mo.mpl.interactive(plt.gcf())
     return
 
 

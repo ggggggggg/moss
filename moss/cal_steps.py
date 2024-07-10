@@ -80,6 +80,7 @@ class RoughCalibrationStep(CalStep):
     line_names: list[str]
     line_energies: np.ndarray
     predicted_energies: np.ndarray
+    gain_pfit: np.polynomial.Polynomial
 
     def dbg_plot(self, df, bin_edges=np.arange(0, 10000, 1), axis=None, plotkwarg={}):
         series = (
