@@ -455,15 +455,16 @@ def __(Optional, moss, np, numpy, pl, plt):
         use_expr: pl.Expr
         params_update: lmfit.parameter.Parameters
 
-        def params(self):
+        def params(self, bin_centers, counts):
             params = self.model.make_params()
             params["dph_de"].set(1.0, vary=False)
+            params = self.model.guess(counts, bin_centers=bin_centers, dph_de=1)
             params = params.update(self.params_update)
             return params
 
         def fit_series(self, series):
             bin_centers, counts = moss.misc.hist_of_series(series, self.bin_edges)
-            params = self.params()
+            params = self.params(bin_centers, counts)
             bin_centers, bin_size = moss.misc.midpoints_and_step_size(self.bin_edges)
             result = self.model.fit(counts, params, bin_centers=bin_centers)
             result.set_label_hints(
@@ -528,8 +529,10 @@ def __(Optional, moss, np, numpy, pl, plt):
             n = len(self.results)
             cols = min(3, n)
             rows = math.ceil(n / cols)
-            fig, axes = plt.subplots(rows, cols, figsize=(cols*4, rows*4))  # Adjust figure size as needed
-            
+            fig, axes = plt.subplots(
+                rows, cols, figsize=(cols * 4, rows * 4)
+            )  # Adjust figure size as needed
+
             # If there's only one subplot, axes is not a list but a single Axes object.
             if rows == 1 and cols == 1:
                 axes = [axes]
@@ -537,14 +540,14 @@ def __(Optional, moss, np, numpy, pl, plt):
                 axes = axes.flatten()
             else:
                 axes = axes.ravel()
-            
+
             for result, ax in zip(self.results, axes):
                 result.plotm(ax=ax)
-            
+
             # Hide any remaining empty subplots
-            for ax in axes[len(self.results):]:
-                ax.axis('off')
-            
+            for ax in axes[len(self.results) :]:
+                ax.axis("off")
+
             plt.tight_layout()
             return fig, axes
     return (
