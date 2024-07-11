@@ -194,3 +194,12 @@ class CalSteps:
     def with_step(self, step: CalStep):
         # return a new CalSteps with the step added, no mutation!
         return CalSteps(self.steps + [step])
+    
+@dataclass(frozen=True)
+class MultiFitSplineStep(moss.CalStep):
+    ph2e: callable
+    e2ph: callable
+    multifit: moss.MultiFit
+
+    def dbg_plot(self, df):
+        self.multifit.plot_results()

@@ -317,3 +317,28 @@ class Channel:
                 df_history=self.df_history,
                 steps=self.steps,
             ) 
+    
+    def multifit_spline_cal(
+        self, multifit: moss.MultiFit, previous_cal_step_index, calibrated_col
+    ):
+        import scipy.interpolate
+        from scipy.interpolate import CubicSpline
+        previous_cal_step = self.steps[previous_cal_step_index]
+        rough_energy_col = previous_cal_step.output
+        uncalibrated_col = previous_cal_step.inputs[0]
+        fits_with_results = multifit.fit_ch(self, col=rough_energy_col)
+        multifit_df = fits_with_results.results_params_as_df()
+        peaks_in_energy_rough_cal = multifit_df["peak_ph"].to_numpy()
+        peaks_uncalibrated = [previous_cal_step.energy2ph(e) for e in peaks_in_energy_rough_cal]
+        peaks_in_energy_reference = multifit_df["peak_energy_ref"].to_numpy()
+        spline = CubicSpline(peaks_uncalibrated, peaks_in_energy_reference, bc_type="natural")
+        step = moss.MultiFitSplineStep(
+            [uncalibrated_col],
+            calibrated_col,
+            self.good_expr,
+            spline,
+            spline,
+            lambda e: spline.solve[e][0],
+            fits_with_results,
+        )
+        return self.with_step(step)

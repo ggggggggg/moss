@@ -425,11 +425,10 @@ def __(mo):
         r"""
         # todos!
          * external trigger
-         * calibration plan for fitting multiple lines
          * check accuracy of psd level and filter vdv
          * start automated tests
          * move drift correct into moss
-         * move fitting into moss
+         * move fitting into moss (maybe seperate package?)
         """
     )
     return
@@ -441,6 +440,7 @@ def __(mo):
         r"""
         # fine calibration
         first we show off the MultiFit class, then we use it to run a fine calibration step
+        then we use the same multifit spec to calibrate our data, and make the debug plot
         """
     )
     return
@@ -465,92 +465,15 @@ def __(multifit_with_results):
 
 
 @app.cell
-def __(MultiFit, MultiFitSplineStep, ch3, data3, moss, multifit):
-    import scipy.interpolate
-    from scipy.interpolate import CubicSpline
-    def multifit_spline_cal(
-        self, multifit: MultiFit, previous_cal_step_index, calibrated_col
-    ):
-        previous_cal_step = self.steps[previous_cal_step_index]
-        rough_energy_col = previous_cal_step.output
-        uncalibrated_col = previous_cal_step.inputs[0]
-        fits_with_results = multifit.fit_ch(self, col=rough_energy_col)
-        multifit_df = fits_with_results.results_params_as_df()
-        peaks_in_energy_rough_cal = multifit_df["peak_ph"].to_numpy()
-        peaks_uncalibrated = [previous_cal_step.energy2ph(e) for e in peaks_in_energy_rough_cal]
-        peaks_in_energy_reference = multifit_df["peak_energy_ref"].to_numpy()
-        spline = CubicSpline(peaks_uncalibrated, peaks_in_energy_reference, bc_type="natural")
-        step = MultiFitSplineStep(
-            [uncalibrated_col],
-            calibrated_col,
-            self.good_expr,
-            spline,
-            spline,
-            lambda e: spline.solve[e][0],
-            fits_with_results,
-        )
-        return self.with_step(step)
-
-    moss.Channel.multifit_spline_cal = multifit_spline_cal
-    multifit_spline_cal(ch3, multifit, previous_cal_step_index=5, calibrated_col="energy2_5lagy_dc")
-    data4= data3.transform_channels(lambda ch: multifit_spline_cal(ch, multifit, previous_cal_step_index=5, calibrated_col="energy2_5lagy_dc"))
-    return CubicSpline, data4, multifit_spline_cal, scipy
-
-
-@app.cell
-def __(MultiFit, moss):
-    from dataclasses import dataclass
-
-
-    @dataclass(frozen=True)
-    class MultiFitSplineStep(moss.CalStep):
-        ph2e: callable
-        e2ph: callable
-        multifit: MultiFit
-
-        def dbg_plot(self, df):
-            self.multifit.plot_results()
-
-
-    # step2 = MultiFitSplineStep(
-    #     ["5lagy_dc"],
-    #     "energy2_5lagy_dc",
-    #     ch3.good_expr,
-    #     spline,
-    #     multifit_df["line"].to_numpy(),
-    #     multifit_df["peak_energy_ref"].to_numpy(),
-    #     multifit_df["peak_energy_ref"].to_numpy(),
-    #     spline,
-    #     lambda e: spline.solve[e][0],
-    #     fits_with_results,
-    # )
-    # ch4 = ch3.with_step(step2)
-    return MultiFitSplineStep, dataclass
-
-
-@app.cell
-def __(ch3):
-    _step = ch3.steps[5]
-    pfit = _step.ph2energy
-    _step.energy2ph(1000)
-    return pfit,
+def __(data3, multifit):
+    data4= data3.transform_channels(lambda ch: ch.multifit_spline_cal(multifit, previous_cal_step_index=5, calibrated_col="energy2_5lagy_dc"))
+    return data4,
 
 
 @app.cell
 def __(data4, mo, plt):
     data4.channels[4102].step_plot(6)
     mo.mpl.interactive(plt.gcf())
-    return
-
-
-@app.cell
-def __(pfit):
-    pfit(1782)
-    return
-
-
-@app.cell
-def __():
     return
 
 
