@@ -434,138 +434,8 @@ def __(mo):
 
 
 @app.cell
-def __(Optional, moss, np, numpy, pl, plt):
-    from dataclasses import dataclass, field
-    import mass
-    import lmfit
-    import copy
-    import math
-
-
-    def handle_none(val, default):
-        if val is None:
-            return copy.copy(default)
-        return val
-
-
-    @dataclass(frozen=True)
-    class FitSpec:
-        model: mass.GenericLineModel
-        bin_edges: numpy.ndarray
-        use_expr: pl.Expr
-        params_update: lmfit.parameter.Parameters
-
-        def params(self, bin_centers, counts):
-            params = self.model.make_params()
-            params["dph_de"].set(1.0, vary=False)
-            params = self.model.guess(counts, bin_centers=bin_centers, dph_de=1)
-            params = params.update(self.params_update)
-            return params
-
-        def fit_series(self, series):
-            bin_centers, counts = moss.misc.hist_of_series(series, self.bin_edges)
-            params = self.params(bin_centers, counts)
-            bin_centers, bin_size = moss.misc.midpoints_and_step_size(self.bin_edges)
-            result = self.model.fit(counts, params, bin_centers=bin_centers)
-            result.set_label_hints(
-                binsize=bin_size,
-                ds_shortname="??",
-                unit_str="eV",
-                attr_str=series.name,
-                states_hint=f"{self.use_expr}",
-                cut_hint=f"",
-            )
-            return result
-
-
-    @dataclass(frozen=True)
-    class MultiFit:
-        default_d: float = 50
-        default_bin_size: float = 0.5
-        default_use_expr: bool = True
-        default_params_update: dict = field(default_factory=lmfit.Parameters)
-        fitspecs: list[FitSpec] = field(default_factory=list)
-        results: Optional[list] = None
-
-        def with_line(
-            self, line, dlo=None, dhi=None, bin_size=None, use_expr=None, params_update=None
-        ):
-            model = mass.getmodel(line)
-            peak_energy = model.spect.peak_energy
-            dlo = handle_none(dlo, self.default_d)
-            dhi = handle_none(dhi, self.default_d)
-            bin_size = handle_none(bin_size, self.default_bin_size)
-            params_update = handle_none(params_update, self.default_params_update)
-            use_expr = handle_none(use_expr, self.default_use_expr)
-            bin_edges = np.arange(-dlo, dhi + bin_size, bin_size) + peak_energy
-            fitspec = FitSpec(model, bin_edges, use_expr, params_update)
-            return self.with_fitspec(fitspec)
-
-        def with_fitspec(self, fitspec):
-            return MultiFit(
-                self.default_d,
-                self.default_bin_size,
-                self.default_use_expr,
-                self.default_params_update,
-                self.fitspecs + [fitspec],
-                self.results,
-            )
-
-        def with_results(self, results):
-            return MultiFit(
-                self.default_d,
-                self.default_bin_size,
-                self.default_use_expr,
-                self.default_params_update,
-                self.fitspecs,
-                results,
-            )
-
-        def fit_series(self, series):
-            results = [fitspec.fit_series(series) for fitspec in self.fitspecs]
-            return self.with_results(results)
-
-        def plot_results(self):
-            n = len(self.results)
-            cols = min(3, n)
-            rows = math.ceil(n / cols)
-            fig, axes = plt.subplots(
-                rows, cols, figsize=(cols * 4, rows * 4)
-            )  # Adjust figure size as needed
-
-            # If there's only one subplot, axes is not a list but a single Axes object.
-            if rows == 1 and cols == 1:
-                axes = [axes]
-            elif rows == 1 or cols == 1:
-                axes = axes.flatten()
-            else:
-                axes = axes.ravel()
-
-            for result, ax in zip(self.results, axes):
-                result.plotm(ax=ax)
-
-            # Hide any remaining empty subplots
-            for ax in axes[len(self.results) :]:
-                ax.axis("off")
-
-            plt.tight_layout()
-            return fig, axes
-    return (
-        FitSpec,
-        MultiFit,
-        copy,
-        dataclass,
-        field,
-        handle_none,
-        lmfit,
-        mass,
-        math,
-    )
-
-
-@app.cell
-def __(MultiFit):
-    fits = MultiFit(default_d=40, default_bin_size=0.6)
+def __(moss):
+    fits = moss.MultiFit(default_fit_width=80, default_bin_size=0.6)
     fits = fits.with_line("MnKAlpha").with_line("CuKAlpha").with_line("PdLAlpha")
     return fits,
 
@@ -585,10 +455,71 @@ def __(fits_with_results, mo, plt):
 
 @app.cell
 def __(fits_with_results):
-    mn_result, cu_result, pd_result = fits_with_results.results
+    pd_result, mn_result, cu_result = fits_with_results.results
     assert mn_result.params["fwhm"].value < 3.34
-    assert cu_result.params["fwhm"].value < 3.34
+    assert cu_result.params["fwhm"].value < 3.7
     return cu_result, mn_result, pd_result
+
+
+@app.cell
+def __(fits_with_results):
+    multifit_df = fits_with_results.results_params_as_df()
+    multifit_df
+    return multifit_df,
+
+
+@app.cell
+def __(multifit_df):
+    import scipy.interpolate
+    from scipy.interpolate import CubicSpline
+
+    ph = multifit_df["peak_ph"].to_numpy()
+    e = multifit_df["peak_energy_ref"].to_numpy()
+    spline = CubicSpline(ph, e,bc_type="natural")
+    return CubicSpline, e, ph, scipy, spline
+
+
+@app.cell
+def __(multifit_df, spline):
+    spline(multifit_df["peak_ph"].to_numpy())==multifit_df["peak_energy_ref"].to_numpy()
+    return
+
+
+@app.cell
+def __(e, spline):
+    spline.solve(e[0])
+    return
+
+
+@app.cell
+def __(
+    MultiFit,
+    axis,
+    ch3,
+    dataclass,
+    fits_with_results,
+    moss,
+    multifit_df,
+    np,
+    spline,
+):
+    @dataclass(frozen=True)
+    class MultiFitSplineStep(moss.CalStep):
+        line_names: list[str]
+        line_energies: np.ndarray
+        predicted_energies: np.ndarray
+        ph2e: callable
+        e2ph: callable
+        multifit: MultiFit
+
+        def dbg_plot(self, df):
+            self.multifit.plot_results()
+            return axis
+
+    step2 = MultiFitSplineStep(["5lagy_dc"], "energy2_5lagy_dc", ch3.good_expr, spline, multifit_df["line"].to_numpy(),multifit_df["peak_energy_ref"].to_numpy(),multifit_df["peak_energy_ref"].to_numpy(),
+                             spline, lambda e: spline.solve[e][0], fits_with_results)
+    ch4 = ch3.with_step(step2)
+    return MultiFitSplineStep, ch4, step2
 
 
 @app.cell

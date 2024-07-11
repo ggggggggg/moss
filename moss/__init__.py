@@ -10,3 +10,4 @@ from .noise_channel import NoiseChannel
 from .cal_steps import CalSteps, CalStep, DriftCorrectStep, RoughCalibrationStep, SummarizeStep, Filter5LagStep
 from .channel import Channel, ChannelHeader
 from .channels import Channels
+from .multifit import FitSpec, MultiFit
