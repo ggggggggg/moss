@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
-import mass
 import lmfit
 import copy
+import mass
 import math
 import numpy as np
 import polars as pl
@@ -14,6 +14,7 @@ def handle_none(val, default):
     if val is None:
         return copy.copy(default)
     return val
+
 
 
 @dataclass(frozen=True)
@@ -30,7 +31,7 @@ class FitSpec:
         params = params.update(self.params_update)
         return params
 
-    def fit_series(self, series):
+    def fit_series_without_use_expr(self, series):
         bin_centers, counts = moss.misc.hist_of_series(series, self.bin_edges)
         params = self.params(bin_centers, counts)
         bin_centers, bin_size = moss.misc.midpoints_and_step_size(self.bin_edges)
@@ -44,7 +45,13 @@ class FitSpec:
             cut_hint=f"",
         )
         return result
-
+    
+    def fit_df(self, df: pl.DataFrame, col: str, good_expr: pl.Expr):       
+        series = moss.good_series(df, col, good_expr, use_expr=self.use_expr)
+        return self.fit_series_without_use_expr(series)
+    
+    def fit_ch(self, ch: moss.Channel, col: str):
+        return self.fit_df(ch.df, col, ch.good_expr)
 
 @dataclass(frozen=True)
 class MultiFit:
@@ -101,11 +108,22 @@ class MultiFit:
             d[param_name+"_strerr"]=[result.params[param_name].stderr for result in self.results]
         return pl.DataFrame(d)
 
-    def fit_series(self, series):
-        results = [fitspec.fit_series(series) for fitspec in self.fitspecs]
+    def fit_series_without_use_expr(self, series: pl.Series):
+        results = [fitspec.fit_series_without_use_expr(series) for fitspec in self.fitspecs]
         return self.with_results(results)
 
+    def fit_df(self, df: pl.DataFrame, col: str, good_expr: pl.Expr):
+        results = []
+        for fitspec in self.fitspecs:
+            result = fitspec.fit_df(df, col, good_expr)
+            results.append(result)
+        return self.with_results(results)   
+    
+    def fit_ch(self, ch: moss.Channel, col: str):
+        return self.fit_df(ch.df, col, ch.good_expr)
+
     def plot_results(self):
+        assert self.results is not None
         n = len(self.results)
         cols = min(3, n)
         rows = math.ceil(n / cols)

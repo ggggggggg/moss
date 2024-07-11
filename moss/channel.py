@@ -53,22 +53,14 @@ class Channel:
     def plot_hist(self, col, bin_edges, axis=None):
         return moss.misc.plot_hist_of_series(self.df[col], bin_edges, axis)
     
-    def multifit_cal(self, fitspecs, rough_cal_ind):
-        rough_cal_step = self.steps[rough_cal_ind]
-        return None
+    def good_series(self, col, use_expr):
+        return moss.good_series(self.df, col, self.good_expr, use_expr)
 
-
-    def rough_cal(
+    def rough_cal_gain(
         self, line_names, uncalibrated_col, calibrated_col, ph_smoothing_fwhm
     ):
         # this is meant to filter the data, then select down to the columsn we need, then materialize them, all without copying our pulse records again
-        uncalibrated = (
-            self.df.lazy()
-            .filter(self.good_expr)
-            .select(pl.col(uncalibrated_col))
-            .collect()[uncalibrated_col]
-            .to_numpy()
-        )
+        uncalibrated = self.good_series(uncalibrated_col, use_expr=True).to_numpy()
         peak_ph_vals, _peak_heights = mass.algorithms.find_local_maxima(
             uncalibrated, gaussian_fwhm=ph_smoothing_fwhm
         )
@@ -88,7 +80,7 @@ class Channel:
         # energy_residuals = predicted_energies - energies_out
         # if any(np.abs(energy_residuals) > max_residual_ev):
         #     raise Exception(f"too large residuals: {energy_residuals=} eV")
-        step = RoughCalibrationStep(
+        step = moss.RoughCalibrationGainStep(
             [uncalibrated_col],
             calibrated_col,
             self.good_expr,
@@ -97,6 +89,37 @@ class Channel:
             line_energies=energies_out,
             predicted_energies=predicted_energies,
             gain_pfit = gain_pfit
+        )
+        return self.with_step(step)
+    
+    def rough_cal(
+        self, line_names, uncalibrated_col, calibrated_col, ph_smoothing_fwhm
+    ):
+        # this is meant to filter the data, then select down to the columsn we need, then materialize them, all without copying our pulse records again
+        uncalibrated = self.good_series(uncalibrated_col, use_expr=True).to_numpy()
+        peak_ph_vals, _peak_heights = mass.algorithms.find_local_maxima(
+            uncalibrated, gaussian_fwhm=ph_smoothing_fwhm
+        )
+        name_e, energies_out, opt_assignments = mass.algorithms.find_opt_assignment(
+            peak_ph_vals,
+            line_names=line_names,
+            maxacc=0.1,
+        )
+        ph2energy = np.polynomial.Polynomial.fit(opt_assignments, energies_out, deg=2)
+
+        predicted_energies = ph2energy(np.array(opt_assignments))
+        # energy_residuals = predicted_energies - energies_out
+        # if any(np.abs(energy_residuals) > max_residual_ev):
+        #     raise Exception(f"too large residuals: {energy_residuals=} eV")
+        step = moss.RoughCalibrationStep(
+            [uncalibrated_col],
+            calibrated_col,
+            self.good_expr,
+            ph2energy,
+            line_names=name_e,
+            line_energies=energies_out,
+            predicted_energies=predicted_energies,
+            ph2energy = ph2energy
         )
         return self.with_step(step)
 

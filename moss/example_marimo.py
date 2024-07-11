@@ -279,9 +279,17 @@ def __(ch2, data2):
 
 @app.cell
 def __(ch2):
-    # to help you remember not to mutate, everything is as immutable as python will allow! this cell errors out!
-    ch2.df = 4
-    return
+    # to help you remember not to mutate, everything is as immutable as python will allow! assignment throws!
+    from dataclasses import FrozenInstanceError
+    try:
+        ch2.df = 4
+    except FrozenInstanceError:
+        pass
+    except:
+        raise
+    else:
+        Exception("this was supposed to throw!")
+    return FrozenInstanceError,
 
 
 @app.cell
@@ -350,7 +358,7 @@ def __(ch2, pl):
     ch3 = ch2.driftcorrect(
         indicator="pretrig_mean",
         uncorrected="energy_5lagy_dc",
-        use_expr=(pl.col("energy_5lagy_dc").is_between(2800,2850)),
+        use_expr=(pl.col("energy_5lagy_dc").is_between(2800, 2850)),
     )
     return ch3,
 
@@ -429,97 +437,116 @@ def __(mo):
 
 @app.cell
 def __(mo):
-    mo.md(r"# fine calibration")
+    mo.md(
+        r"""
+        # fine calibration
+        first we show off the MultiFit class, then we use it to run a fine calibration step
+        """
+    )
     return
 
 
 @app.cell
-def __(moss):
-    fits = moss.MultiFit(default_fit_width=80, default_bin_size=0.6)
-    fits = fits.with_line("MnKAlpha").with_line("CuKAlpha").with_line("PdLAlpha")
-    return fits,
-
-
-@app.cell
-def __(data3, fits):
-    fits_with_results = fits.fit_series(data3.channels[4102].df["energy_5lagy_dc"])
-    return fits_with_results,
-
-
-@app.cell
-def __(fits_with_results, mo, plt):
-    fits_with_results.plot_results()
+def __(data3, mo, moss, plt):
+    multifit = moss.MultiFit(default_fit_width=80, default_bin_size=0.6)
+    multifit = multifit.with_line("MnKAlpha").with_line("CuKAlpha").with_line("PdLAlpha")
+    multifit_with_results = multifit.fit_ch(data3.channels[4102], "energy_5lagy_dc")
+    multifit_with_results.plot_results()
     mo.mpl.interactive(plt.gcf())
-    return
+    return multifit, multifit_with_results
 
 
 @app.cell
-def __(fits_with_results):
-    pd_result, mn_result, cu_result = fits_with_results.results
+def __(multifit_with_results):
+    pd_result, mn_result, cu_result = multifit_with_results.results
     assert mn_result.params["fwhm"].value < 3.34
     assert cu_result.params["fwhm"].value < 3.7
     return cu_result, mn_result, pd_result
 
 
 @app.cell
-def __(fits_with_results):
-    multifit_df = fits_with_results.results_params_as_df()
-    multifit_df
-    return multifit_df,
-
-
-@app.cell
-def __(multifit_df):
+def __(MultiFit, MultiFitSplineStep, ch3, data3, moss, multifit):
     import scipy.interpolate
     from scipy.interpolate import CubicSpline
+    def multifit_spline_cal(
+        self, multifit: MultiFit, previous_cal_step_index, calibrated_col
+    ):
+        previous_cal_step = self.steps[previous_cal_step_index]
+        rough_energy_col = previous_cal_step.output
+        uncalibrated_col = previous_cal_step.inputs[0]
+        fits_with_results = multifit.fit_ch(self, col=rough_energy_col)
+        multifit_df = fits_with_results.results_params_as_df()
+        peaks_in_energy_rough_cal = multifit_df["peak_ph"].to_numpy()
+        peaks_uncalibrated = [previous_cal_step.energy2ph(e) for e in peaks_in_energy_rough_cal]
+        peaks_in_energy_reference = multifit_df["peak_energy_ref"].to_numpy()
+        spline = CubicSpline(peaks_uncalibrated, peaks_in_energy_reference, bc_type="natural")
+        step = MultiFitSplineStep(
+            [uncalibrated_col],
+            calibrated_col,
+            self.good_expr,
+            spline,
+            spline,
+            lambda e: spline.solve[e][0],
+            fits_with_results,
+        )
+        return self.with_step(step)
 
-    ph = multifit_df["peak_ph"].to_numpy()
-    e = multifit_df["peak_energy_ref"].to_numpy()
-    spline = CubicSpline(ph, e,bc_type="natural")
-    return CubicSpline, e, ph, scipy, spline
+    moss.Channel.multifit_spline_cal = multifit_spline_cal
+    multifit_spline_cal(ch3, multifit, previous_cal_step_index=5, calibrated_col="energy2_5lagy_dc")
+    data4= data3.transform_channels(lambda ch: multifit_spline_cal(ch, multifit, previous_cal_step_index=5, calibrated_col="energy2_5lagy_dc"))
+    return CubicSpline, data4, multifit_spline_cal, scipy
 
 
 @app.cell
-def __(multifit_df, spline):
-    spline(multifit_df["peak_ph"].to_numpy())==multifit_df["peak_energy_ref"].to_numpy()
-    return
+def __(MultiFit, moss):
+    from dataclasses import dataclass
 
 
-@app.cell
-def __(e, spline):
-    spline.solve(e[0])
-    return
-
-
-@app.cell
-def __(
-    MultiFit,
-    axis,
-    ch3,
-    dataclass,
-    fits_with_results,
-    moss,
-    multifit_df,
-    np,
-    spline,
-):
     @dataclass(frozen=True)
     class MultiFitSplineStep(moss.CalStep):
-        line_names: list[str]
-        line_energies: np.ndarray
-        predicted_energies: np.ndarray
         ph2e: callable
         e2ph: callable
         multifit: MultiFit
 
         def dbg_plot(self, df):
             self.multifit.plot_results()
-            return axis
 
-    step2 = MultiFitSplineStep(["5lagy_dc"], "energy2_5lagy_dc", ch3.good_expr, spline, multifit_df["line"].to_numpy(),multifit_df["peak_energy_ref"].to_numpy(),multifit_df["peak_energy_ref"].to_numpy(),
-                             spline, lambda e: spline.solve[e][0], fits_with_results)
-    ch4 = ch3.with_step(step2)
-    return MultiFitSplineStep, ch4, step2
+
+    # step2 = MultiFitSplineStep(
+    #     ["5lagy_dc"],
+    #     "energy2_5lagy_dc",
+    #     ch3.good_expr,
+    #     spline,
+    #     multifit_df["line"].to_numpy(),
+    #     multifit_df["peak_energy_ref"].to_numpy(),
+    #     multifit_df["peak_energy_ref"].to_numpy(),
+    #     spline,
+    #     lambda e: spline.solve[e][0],
+    #     fits_with_results,
+    # )
+    # ch4 = ch3.with_step(step2)
+    return MultiFitSplineStep, dataclass
+
+
+@app.cell
+def __(ch3):
+    _step = ch3.steps[5]
+    pfit = _step.ph2energy
+    _step.energy2ph(1000)
+    return pfit,
+
+
+@app.cell
+def __(data4, mo, plt):
+    data4.channels[4102].step_plot(6)
+    mo.mpl.interactive(plt.gcf())
+    return
+
+
+@app.cell
+def __(pfit):
+    pfit(1782)
+    return
 
 
 @app.cell

@@ -76,19 +76,14 @@ class DriftCorrectStep(CalStep):
 
 
 @dataclass(frozen=True)
-class RoughCalibrationStep(CalStep):
+class RoughCalibrationGainStep(CalStep):
     line_names: list[str]
     line_energies: np.ndarray
     predicted_energies: np.ndarray
     gain_pfit: np.polynomial.Polynomial
 
     def dbg_plot(self, df, bin_edges=np.arange(0, 10000, 1), axis=None, plotkwarg={}):
-        series = (
-            df.lazy()
-            .filter(self.good_expr)
-            .select(pl.col(self.output))
-            .collect()[self.output]
-        )
+        series = moss.good_series(df, col=self.output, good_expr=self.good_expr, use_expr=True)
         axis = moss.misc.plot_hist_of_series(series, bin_edges)
         axis.plot(self.line_energies, np.zeros(len(self.line_energies)), "o")
         for line_name, energy in zip(self.line_names, self.line_energies):
@@ -97,6 +92,27 @@ class RoughCalibrationStep(CalStep):
         energy_residuals = self.predicted_energies-self.line_energies
         axis.set_title(f"RoughCalibrationStep dbg_plot\n{energy_residuals=}")
         return axis
+    
+@dataclass(frozen=True)
+class RoughCalibrationStep(CalStep):
+    line_names: list[str]
+    line_energies: np.ndarray
+    predicted_energies: np.ndarray
+    ph2energy: np.polynomial.Polynomial
+
+    def dbg_plot(self, df, bin_edges=np.arange(0, 10000, 1), axis=None, plotkwarg={}):
+        series = moss.good_series(df, col=self.output, good_expr=self.good_expr, use_expr=True)
+        axis = moss.misc.plot_hist_of_series(series, bin_edges)
+        axis.plot(self.line_energies, np.zeros(len(self.line_energies)), "o")
+        for line_name, energy in zip(self.line_names, self.line_energies):
+            axis.annotate(line_name, (energy, 0), rotation=90)
+        np.set_printoptions(precision=2)
+        energy_residuals = self.predicted_energies-self.line_energies
+        axis.set_title(f"RoughCalibrationStep dbg_plot\n{energy_residuals=}")
+        return axis
+    
+    def energy2ph(self, energy):
+        return moss.misc.smallest_positive_real((self.ph2energy-energy).roots())
 
 
 @dataclass(frozen=True)

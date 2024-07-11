@@ -1,5 +1,24 @@
 import numpy as np
 import pylab as plt
+import polars as pl
+
+def smallest_positive_real(arr):
+    def is_positive_real(x):
+        return x > 0 and np.isreal(x)
+    positive_real_numbers = np.array(list(filter(is_positive_real, arr)))
+    return np.min(positive_real_numbers)
+
+def good_series(df, col, good_expr, use_expr):
+    # this uses lazy before filting to hopefully allow polars to only access the data needed to filter
+    # and the data needed to output what we want
+    return (
+        df.lazy()
+        .filter(good_expr)
+        .filter(use_expr)
+        .select(pl.col(col))
+        .collect()
+        .to_series()
+    )
 
 def median_absolute_deviation(x):
     return np.median(np.abs(x - np.median(x)))
