@@ -216,6 +216,19 @@ def __(result):
 
 @app.cell
 def __(mo):
+    mo.md(r"# plot a noise spectrum")
+    return
+
+
+@app.cell
+def __(ch, mo, plt):
+    ch.noise.spectrum().plot()
+    mo.mpl.interactive(plt.gcf())
+    return
+
+
+@app.cell
+def __(mo):
     mo.md(
         """
         # replay
@@ -492,7 +505,7 @@ def __(moss, steps_dict):
 
 @app.cell
 def __(data4):
-    data4.dfg().select("timestamp", "energy_5lagy_dc", "state_label", "ch_num").write_parquet("example_result.parquet")
+    data4.dfg().select("timestamp", "energy2_5lagy_dc", "state_label", "ch_num").write_parquet("example_result.parquet")
     return
 
 
@@ -521,6 +534,26 @@ def __(data4):
     data_concat = data4.concat_data(data4)
     assert 2*len(data4.dfg())==len(data_concat.dfg())
     return data_concat,
+
+
+@app.cell
+def __(mo):
+    mo.md(r"# final coadded spectrum")
+    return
+
+
+@app.cell
+def __(data4, mo, plt):
+    _result = data4.linefit("MnKAlpha",col="energy2_5lagy_dc")
+    _result.plotm()
+    mo.mpl.interactive(plt.gcf())
+    return
+
+
+@app.cell
+def __(data2):
+    ch6=data2.channels[4102]
+    return ch6,
 
 
 @app.cell

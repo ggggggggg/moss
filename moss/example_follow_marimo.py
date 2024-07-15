@@ -22,7 +22,6 @@ def __(mo):
         we load the same ljh files, the steps_dict and the resulting df to compare to
 
         # todo
-        * turn truth_dfg into a Channels
         * make a demo that uses a timer to read progressvley larger slices of the data, and outputs all the new data to some format
         """
     )
@@ -47,7 +46,7 @@ def __(data, steps_dict):
 
 @app.cell
 def __(data2):
-    dfg = data2.dfg().select("timestamp", "energy_5lagy_dc", "ch_num")
+    dfg = data2.dfg().select("timestamp", "energy2_5lagy_dc", "ch_num")
     return dfg,
 
 
@@ -59,8 +58,9 @@ def __(dfg, truth_dfg):
 
 @app.cell
 def __(data2, mo, plt):
-    result = data2.linefit("MnKAlpha", col="energy_5lagy_dc")
+    result = data2.linefit("MnKAlpha", col="energy2_5lagy_dc")
     result.plotm()
+    assert result.params["fwhm"].value<3.32
     mo.mpl.interactive(plt.gcf())
     return result,
 
@@ -87,8 +87,9 @@ def __(data2, moss, truth_dfg):
 
 @app.cell
 def __(data_from_truth_dfg, mo, plt):
-    result_from_truth_dfg = data_from_truth_dfg.linefit("MnKAlpha", col="energy_5lagy_dc")
+    result_from_truth_dfg = data_from_truth_dfg.linefit("MnKAlpha", col="energy2_5lagy_dc")
     result_from_truth_dfg.plotm()
+    assert result_from_truth_dfg.params["fwhm"].value<3.32
     mo.mpl.interactive(plt.gcf())
     return result_from_truth_dfg,
 
