@@ -137,6 +137,12 @@ class Channel:
             steps_elapsed_s=self.steps_elapsed_s + [elapsed_s],
         )
         return ch2
+    
+    def with_steps(self, steps):
+        ch2 = self
+        for step in steps:
+            ch2 = ch2.with_step(step)
+        return ch2
 
     def with_good_expr_pretrig_mean_and_postpeak_deriv(self):
         max_postpeak_deriv = moss.misc.outlier_resistant_nsigma_above_mid(
@@ -338,7 +344,19 @@ class Channel:
             self.good_expr,
             spline,
             spline,
-            lambda e: spline.solve[e][0],
             fits_with_results,
         )
         return self.with_step(step)
+    
+    def concat_df(self, df):
+        ch2 = moss.Channel(pl.concat([self.df, df]),
+                        self.header,
+                        self.noise,
+                        self.good_expr
+                        ) 
+        # we won't copy over df_history and steps. I don't think you should use this when those are filled in?
+        return ch2
+    
+    def concat_ch(self, ch):
+        ch2 = self.concat_df(ch.df)
+        return ch2

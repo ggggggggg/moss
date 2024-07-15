@@ -1,6 +1,17 @@
 import numpy as np
 import pylab as plt
 import polars as pl
+import dill
+
+
+def pickle_object(obj, filename):
+    with open(filename, 'wb') as file:
+        dill.dump(obj, file)
+
+def unpickle_object(filename):
+    with open(filename, 'rb') as file:
+        obj = dill.load(file)
+        return obj
 
 def smallest_positive_real(arr):
     def is_positive_real(x):

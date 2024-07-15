@@ -50,7 +50,7 @@ class FitSpec:
         series = moss.good_series(df, col, good_expr, use_expr=self.use_expr)
         return self.fit_series_without_use_expr(series)
     
-    def fit_ch(self, ch: moss.Channel, col: str):
+    def fit_ch(self, ch, col: str):
         return self.fit_df(ch.df, col, ch.good_expr)
 
 @dataclass(frozen=True)
@@ -119,7 +119,7 @@ class MultiFit:
             results.append(result)
         return self.with_results(results)   
     
-    def fit_ch(self, ch: moss.Channel, col: str):
+    def fit_ch(self, ch, col: str):
         return self.fit_df(ch.df, col, ch.good_expr)
 
     def plot_results(self):

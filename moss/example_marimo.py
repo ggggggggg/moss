@@ -429,6 +429,7 @@ def __(mo):
          * start automated tests
          * move drift correct into moss
          * move fitting into moss (maybe seperate package?)
+         * open multi ljh example
         """
     )
     return
@@ -474,6 +475,56 @@ def __(data3, multifit):
 def __(data4, mo, plt):
     data4.channels[4102].step_plot(6)
     mo.mpl.interactive(plt.gcf())
+    return
+
+
+@app.cell
+def __(data4):
+    steps_dict = {ch_num:ch.steps for ch_num, ch in data4.channels.items()}
+    return steps_dict,
+
+
+@app.cell
+def __(moss, steps_dict):
+    moss.misc.pickle_object(steps_dict, filename="example_steps_dict.pkl")
+    return
+
+
+@app.cell
+def __(data4):
+    data4.dfg().select("timestamp", "energy_5lagy_dc", "state_label", "ch_num").write_parquet("example_result.parquet")
+    return
+
+
+@app.cell
+def __(mo):
+    mo.md(
+        r"""
+        # "multi-ljh analysis"
+        we can easily concatenate a `Channel`s or `Channels`s with `Channel.contcat_df`, `Channel.concat_ch`, and `channels.concat_data`. For now the steps and df history are dropped, since it's not quite clear how to use them helpfully. Internally this relies on polars ability to concat `DataFrame`s without allocation.
+        """
+    )
+    return
+
+
+@app.cell
+def __(ch):
+    # here we concatenate two channels and check that the length has double
+    ch_concat = ch.concat_ch(ch)
+    assert 2*len(ch.df) == len(ch_concat.df)
+    return ch_concat,
+
+
+@app.cell
+def __(data4):
+    # here we concatenate two `Channels` objects and check that the length of the resulting dfg (remember, this is the df of good pulses) has doubled
+    data_concat = data4.concat_data(data4)
+    assert 2*len(data4.dfg())==len(data_concat.dfg())
+    return data_concat,
+
+
+@app.cell
+def __():
     return
 
 

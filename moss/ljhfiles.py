@@ -8,12 +8,16 @@ import collections
 
 class LJHFile():
     TOO_LONG_HEADER=100
-    def __init__(self, filename):
+    def __init__(self, filename, _limit_pulses = None):
         self.filename = filename
         self.__read_header(self.filename)
         self.dtype = np.dtype([('rowcount', np.int64),
                                 ('posix_usec', np.int64),
                                 ('data', np.uint16, self.nSamples)])
+        if _limit_pulses is not None:
+            # this is used to demo the process of watching an 
+            # ljh file grow over time
+            self.nPulses = min(_limit_pulses, self.nPulses)
         self._mmap = np.memmap(self.filename, self.dtype, mode="r",
                                offset=self.header_size, shape=(self.nPulses,))
         self._cache_i = -1

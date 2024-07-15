@@ -4,6 +4,7 @@ import pylab as plt
 import numpy as np
 import functools
 import collections
+import mass
 import moss
 import joblib
 
@@ -128,7 +129,46 @@ class Channels:
         return self.with_experiment_state(df_es)
 
     def with_experiment_state(self, df_es):
-        _channels = collections.OrderedDict()
+        # this is not as performant as making use_exprs for states
+        # and using .set_sorted on the timestamp column
+        ch2s = {}
         for ch_num, ch in self.channels.items():
-            _channels[ch_num] = ch.with_experiment_state_df(df_es)
-        return Channels(_channels, self.description)    
+            ch2s[ch_num] = ch.with_experiment_state_df(df_es)
+        return Channels(ch2s, self.description)    
+    
+    def with_steps_dict(self, steps_dict):
+        ch2s = {}
+        for ch_num, steps in steps_dict.items():
+            ch = self.channels[ch_num]
+            ch2 = ch.with_steps(steps)
+            ch2s[ch_num] = ch2
+        return Channels(ch2s, self.description+"\nfollowed some steps!!")
+    
+    def concat_data(self, other_data):
+        # sorting here to show intention, but I think set is sorted by insertion order as
+        # an implementation detail so this may not do anything
+        ch_nums = sorted(list(set(self.channels.keys()).union(other_data.channels.keys())))
+        channels2 = {}
+        for ch_num in ch_nums:
+            ch = self.channels[ch_num]
+            other_ch = other_data.channels[ch_num]
+            ch2 = ch.concat_ch(other_ch)
+            channels2[ch_num] = ch2
+        return moss.Channels(channels2, self.description+other_data.description)
+    
+    @classmethod
+    def from_df(cls, df, frametime_s=np.nan, n_presamples=None, n_samples=None, description="from Channels.channels_from_df"):
+        # requres a column named "ch_num" containing the channel number
+        keys_df = df.partition_by(by=["ch_num"], as_dict=True)
+        dfs = {keys[0]:df for (keys, df) in keys_df.items()}
+        channels = {}
+        for ch_num, df in dfs.items():
+            channels[ch_num] = moss.Channel(df, header=moss.ChannelHeader(description="from df",
+                        ch_num=ch_num, 
+                        frametime_s=frametime_s, 
+                        n_presamples=n_presamples, 
+                        n_samples=n_samples, 
+                        df=df))
+        return Channels(channels, description)
+        
+        

@@ -196,10 +196,12 @@ class CalSteps:
         return CalSteps(self.steps + [step])
     
 @dataclass(frozen=True)
-class MultiFitSplineStep(moss.CalStep):
-    ph2e: callable
-    e2ph: callable
+class MultiFitSplineStep(CalStep):
+    ph2energy: callable
     multifit: moss.MultiFit
 
     def dbg_plot(self, df):
         self.multifit.plot_results()
+
+    def energy2ph(self, e):
+        return self.ph2energy.solve(e)[0]
