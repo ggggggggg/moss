@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.7.1"
+__generated_with = "0.7.8"
 app = marimo.App(width="medium", app_title="MOSS intro")
 
 
@@ -48,8 +48,15 @@ def __(mo):
 
 
 @app.cell
+def __():
+    import mass
+    mass.__file__
+    return mass,
+
+
+@app.cell
 def __(mo, moss, pl):
-    _root_path = r"C:\Users\oneilg\Desktop\python\src\mass\tests\ljh_files"
+    _root_path = r"C:\Users\jsh7\src\mass\tests\ljh_files"
     _extensions = ["ljh"]
     _folders = moss.ljhutil.find_folders_with_extension(_root_path, _extensions)
     _df = pl.DataFrame({"folder": _folders})
@@ -80,8 +87,8 @@ def __(noise_table, pulse_table):
         pulse_folders = pulse_table.value["folder"]
         pulse_folder = pulse_folders[0]
     else:
-        noise_folder = "C:\\Users\\oneilg\\Desktop\\python\\src\\mass\\tests\\ljh_files\\20230626\\0000"
-        pulse_folder = "C:\\Users\\oneilg\\Desktop\\python\\src\\mass\\tests\\ljh_files\\20230626\\0001"
+        noise_folder = r"C:\Users\jsh7\src\mass\tests\ljh_files\20230626\0000"
+        pulse_folder = r"C:\Users\jsh7\src\mass\tests\ljh_files\20230626\0001"
     return noise_folder, pulse_folder, pulse_folders
 
 
@@ -167,6 +174,14 @@ def __(data2, pl):
 
 
 @app.cell
+def __(ch, mo, plt):
+    plt.figure()
+    plt.plot(ch.df["pulse"][0:10].to_numpy().T)
+    mo.mpl.interactive(plt.gcf())
+    return
+
+
+@app.cell
 def __(data2, mo):
     mo.md(
         f"""
@@ -190,7 +205,8 @@ def __(data2, mo):
         options=_energy_cols, value=_energy_cols[0], label="energy col"
     )
     mo.md(
-        f"""MOSS has some convenient fitting and plotting methods. We can combine them with marimo's super easy ui element to pick a channel number {dropdown_ch} and an energy column name {dropdown_col}. we can use it to make plots!
+        f"""# header 
+        MOSS has some convenient fitting and plotting methods. We can combine them with marimo's super easy ui element to pick a {dropdown_ch} and an energy column name {dropdown_col}. we can use it to make plots!
 
         MOSS fitters are based on the best avaialble spectral shap in the literature, and the fwhm resolution value refers to only the detector portion of the resolution."""
     )
