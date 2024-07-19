@@ -1,2 +1,2 @@
 [tool.mypy]
-strict=true
+strict = true

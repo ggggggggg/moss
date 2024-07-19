@@ -2,13 +2,14 @@ import numpy as np
 import polars as pl
 import os
 import collections
-
+import typing
+from typing import Union, Tuple
 
 
 
 class LJHFile():
     TOO_LONG_HEADER=100
-    def __init__(self, filename, _limit_pulses = None):
+    def __init__(self, filename: str, _limit_pulses: Union[int, None] = None)->None:
         self.filename = filename
         self.__read_header(self.filename)
         self.dtype = np.dtype([('rowcount', np.int64),
@@ -17,14 +18,14 @@ class LJHFile():
         if _limit_pulses is not None:
             # this is used to demo the process of watching an 
             # ljh file grow over time
-            self.nPulses = min(_limit_pulses, self.nPulses)
-        self._mmap = np.memmap(self.filename, self.dtype, mode="r",
-                               offset=self.header_size, shape=(self.nPulses,))
+            self.nPulses: int = min(_limit_pulses, self.nPulses)
+        self._mmap = np.memmap(self.filename, dtype=self.dtype, mode="r",
+                               offset=self.header_size, shape=(self.nPulses,))#what is shape
         self._cache_i = -1
         self._cache_data = None
 
 
-    def __read_header(self, filename):
+    def __read_header(self, filename:str)->None:
         """Read in the text header of an LJH file.
 
         On success, several attributes will be set: self.timebase, .nSamples,
@@ -34,7 +35,7 @@ class LJHFile():
             filename: path to the file to be opened.
         """
         # parse header into a dictionary
-        header_dict = collections.OrderedDict()
+        header_dict: collections.OrderedDict[str,Union[str,int,float]] = collections.OrderedDict()
         with open(filename, "rb") as fp:
             i = 0
             while True:
@@ -48,11 +49,10 @@ class LJHFile():
                     raise IOError("header is too long--seems not to contain '#End of Header'\n"
                                     + "in file %s" % filename)
                 elif b":" in line:
-                    a, b = line.split(b":", 1)  # maxsplits=1, py27 doesnt support keyword
-                    a = a.strip()
-                    b = b.strip()
-                    a = a.decode()
-                    b = b.decode()
+                    _a, _b = line.split(b":", 1)  # maxsplits=1, py27 doesnt support keyword
+                    a:str = _a.strip().decode()
+                    b:str = _b.strip().decode()
+                
                     if a in header_dict and a != "Dummy":
                         print("repeated header entry {}".format(a))
                     header_dict[a] = b
@@ -65,13 +65,13 @@ class LJHFile():
         # extract required values from header_dict
         # use header_dict.get for default values
         header_dict["Filename"] = filename
-        header_dict["Channel"] = int(header_dict["Channel"])
-        header_dict["Timebase"] = float(header_dict["Timebase"])
-        self.timebase = header_dict["Timebase"]
-        header_dict["Total Samples"] = int(header_dict["Total Samples"])
-        self.nSamples = header_dict["Total Samples"]
-        header_dict["Presamples"] = int(header_dict["Presamples"])
-        self.nPresamples = header_dict["Presamples"]
+        header_dict["Channel"] = header_dict["Channel"]
+        header_dict["Timebase"] = header_dict["Timebase"]
+        self.timebase = float(header_dict["Timebase"])
+        header_dict["Total Samples"] = header_dict["Total Samples"]
+        self.nSamples = int(header_dict["Total Samples"])
+        header_dict["Presamples"] =header_dict["Presamples"]
+        self.nPresamples = int(header_dict["Presamples"])
         # column number and row number have entries like "Column number (from 0-0 inclusive)"
         row_number_k = [k for k in header_dict.keys() if k.startswith("Row number")]
         if len(row_number_k) > 0:
@@ -79,15 +79,15 @@ class LJHFile():
         col_number_k = [k for k in header_dict.keys() if k.startswith("Column number")]
         if len(col_number_k) > 0:
             self.row_number = int(header_dict[col_number_k[0]])
-        self.client = header_dict.get("Software Version", "UNKNOWN")
-        header_dict["Number of Columns"] = int(header_dict.get("Number of columns", -1))
-        self.number_of_columns = header_dict["Number of Columns"]
-        header_dict["Number of rows"] = int(header_dict.get("Number of rows", -1))
-        self.number_of_rows = header_dict["Number of rows"]
-        self.timestamp_offset = float(header_dict.get("Timestamp offset (s)", "-1"))
+        self.client = str(header_dict.get("Software Version", "UNKNOWN"))
+        header_dict["Number of Columns"] = header_dict.get("Number of columns", -1)
+        self.number_of_columns = int(header_dict["Number of Columns"])
+        header_dict["Number of rows"] = header_dict.get("Number of rows", -1)
+        self.number_of_rows = int(header_dict["Number of rows"])
+        self.timestamp_offset = float(header_dict.get("Timestamp offset (s)", -1))
         self.version_str = header_dict['Save File Format Version']
         # if Version(self.version_str.decode()) >= Version("2.2.0"):
-        self.pulse_size_bytes = (16 + 2 * self.nSamples) # dont bother with old ljh
+        self.pulse_size_bytes = (16 + 2 * (self.nSamples)) # dont bother with old ljh
         # else:
         #     self.pulse_size_bytes = (6 + 2 * self.nSamples)
         self.binary_size = os.stat(filename).st_size - self.header_size
@@ -100,20 +100,21 @@ class LJHFile():
             self.nPresamples += 3
 
         # Record the sample times in microseconds
+        
         self.sample_usec = (np.arange(self.nSamples)-self.nPresamples) * self.timebase * 1e6
 
-    def get_header_info_as_dict(self):
+    def get_header_info_as_dict(self)->dict[str, Union[int,float]]:
         return {"number_of_columns": self.number_of_columns,
                 "number_of_rows": self.number_of_rows,
                 "timebase_s": self.timebase}
     
-    def __repr__(self):
+    def __repr__(self)->str:
         return f"LJHFile {self.filename}"
     
-    def read_trace(self, i):
+    def read_trace(self, i:int)->typing.Any:
         return self._mmap[i]["data"]
     
-    def to_polars(self, keep_posix_usec=False):
+    def to_polars(self, keep_posix_usec:bool=False)->tuple[pl.DataFrame,pl.DataFrame]:
         df = pl.DataFrame({"pulse":self._mmap["data"],
                            "posix_usec":self._mmap["posix_usec"],
                            "rowcount":self._mmap["rowcount"]},

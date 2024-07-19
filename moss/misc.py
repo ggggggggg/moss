@@ -2,26 +2,27 @@ import numpy as np
 import pylab as plt
 import polars as pl
 import dill
+import typing
+from typing import Union, Tuple, Literal
 
-
-def pickle_object(obj, filename):
+def pickle_object(obj:object, filename:str)->None:
     with open(filename, 'wb') as file:
         dill.dump(obj, file)
 
-def unpickle_object(filename):
+def unpickle_object(filename:str)->object:
     with open(filename, 'rb') as file:
         obj = dill.load(file)
         return obj
 
-def smallest_positive_real(arr):
-    def is_positive_real(x):
+def smallest_positive_real(arr:list[int])->typing.Any:
+    def is_positive_real(x:int)->Literal[False] | np.bool:
         return x > 0 and np.isreal(x)
     positive_real_numbers = np.array(list(filter(is_positive_real, arr)))
     return np.min(positive_real_numbers)
 
-def good_series(df, col, good_expr, use_expr):
+def good_series(df:pl.DataFrame, col:str, good_expr:typing.Any, use_expr:typing.Any)->pl.Series:
     # this uses lazy before filting to hopefully allow polars to only access the data needed to filter
-    # and the data needed to output what we want
+    # and the data needed to outpuS what we want
     return (
         df.lazy()
         .filter(good_expr)
@@ -31,21 +32,21 @@ def good_series(df, col, good_expr, use_expr):
         .to_series()
     )
 
-def median_absolute_deviation(x):
+def median_absolute_deviation(x:int)->typing.Any:
     return np.median(np.abs(x - np.median(x)))
 
 
-def sigma_mad(x):
+def sigma_mad(x:int)->typing.Any:
     return median_absolute_deviation(x) * 1.4826
 
 
-def outlier_resistant_nsigma_above_mid(x, nsigma=5):
+def outlier_resistant_nsigma_above_mid(x: list[float], nsigma:int=5)->floating[Any]:
     mid = np.median(x)
     mad = np.median(np.abs(x - mid))
     sigma_mad = mad * 1.4826
     return mid + nsigma * sigma_mad
 
-def midpoints_and_step_size(x):
+def midpoints_and_step_size(x:np.ndarray)->tuple[np.ndarray,float]:
     d = np.diff(x)
     step_size = d[0]
     assert np.allclose(d, step_size, atol=1e-9)
