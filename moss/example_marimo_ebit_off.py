@@ -5,20 +5,6 @@ app = marimo.App(width="medium", app_title="MOSS intro")
 
 
 @app.cell
-def __(mo):
-    mo.md(
-        """
-        #MOSS internals introdution
-        MOSS is the Microcalorimeter Online Spectral Software, a replacement for MASS. MOSS support many algorithms for pulse filtering, calibration, and corrections. MOSS is built on modern open source data science software, including pola.rs and marimo. MOSS supports some key features that MASS struggled with including:
-          * consecutive data set analysis
-          * online (aka realtime) analysis
-          * easily supporting different analysis chains
-        """
-    )
-    return
-
-
-@app.cell
 def __():
     import polars as pl
     import pylab as plt
@@ -114,17 +100,8 @@ def __(data2, mo):
 
 @app.cell
 def __(ch, mo, pl, plt):
-    # data2 = data.transform_channels(
-    #     lambda channel: channel.
-    #     rough_cal(
-    #         ["MnKAlpha", "MnKBeta", "CuKAlpha", "CuKBeta", "AlKAlpha", "ClKAlpha"],
-    #         uncalibrated_col="filtValue",
-    #         calibrated_col="energy_peak_value",
-    #         ph_smoothing_fwhm=50,
-    #     )
-    # )
     ch2 = ch.rough_cal(
-            ["MnKAlpha", "MnKBeta", "CuKAlpha", "CuKBeta", "AlKAlpha", "ClKAlpha"],
+            ["MnKAlpha", "MnKBeta", "CuKAlpha", "CuKBeta", "AlKAlpha", "ClKAlpha", "KKAlpha","ScKAlpha","MgKAlpha"],
             uncalibrated_col="filtValue",
             calibrated_col="energy_peak_value",
             ph_smoothing_fwhm=50,
@@ -133,6 +110,205 @@ def __(ch, mo, pl, plt):
     ch2.step_plot(0)
     mo.mpl.interactive(plt.gcf())
     return ch2,
+
+
+@app.cell
+def __(ch, moss, np, pl):
+    # Import library
+    from findpeaks import findpeaks
+
+    bin_centers, counts = moss.misc.hist_of_series(ch.good_series("filtValue", use_expr=pl.col("state_label")=="START"), np.arange(0,50000,50))
+
+    # Initialized
+    fp = findpeaks(method='peakdetect', whitelist=["peak"], lookahead=5, verbose=0 )
+
+    # Example data:
+    X = fp.import_example('1dpeaks')
+
+    # Peak detection
+    results = fp.fit(counts)
+
+    # Plot
+    fp.plot()
+    return X, bin_centers, counts, findpeaks, fp, results
+
+
+@app.cell
+def __(results):
+    results
+    return
+
+
+@app.cell
+def __(moss, np):
+    def find_local_maxima(pulse_heights, gaussian_fwhm):
+        """Smears each pulse by a gaussian of gaussian_fhwm and finds local maxima,
+        returns a list of their locations in pulse_height units (sorted by number of
+        pulses in peak) AND their peak values as: (peak_locations, peak_intensities)
+
+        Args:
+            pulse_heights (np.array(dtype=float)): a list of pulse heights (eg p_filt_value)
+            gaussian_fwhm = fwhm of a gaussian that each pulse is smeared with, in same units as pulse heights
+        """
+        # kernel density estimation (with a gaussian kernel)
+        n = 128 * 1024
+        gaussian_fwhm = float(gaussian_fwhm)
+        # The above ensures that lo & hi are floats, so that (lo-hi)/n is always a float in python2
+        sigma = gaussian_fwhm / (np.sqrt(np.log(2) * 2) * 2)
+        tbw = 1.0 / sigma / (np.pi * 2)
+        lo = np.min(pulse_heights) - 3 * gaussian_fwhm
+        hi = np.max(pulse_heights) + 3 * gaussian_fwhm
+        hist, bins = np.histogram(pulse_heights, np.linspace(lo, hi, n + 1))
+        tx = np.fft.rfftfreq(n, (lo - hi) / n)
+        ty = np.exp(-tx**2 / 2 / tbw**2)
+        x = (bins[1:] + bins[:-1]) / 2
+        y = np.fft.irfft(np.fft.rfft(hist) * ty)
+
+        flag = (y[1:-1] > y[:-2]) & (y[1:-1] > y[2:])
+        lm = np.arange(1, n - 1)[flag]
+        lm = lm[np.argsort(-y[lm])]
+        bin_centers, step_size = moss.misc.midpoints_and_step_size(bins)
+        return np.array(x[lm]), np.array(y[lm]), (hist, bin_centers, y)
+    return find_local_maxima,
+
+
+@app.cell
+def __(np):
+    import itertools
+
+    def find_pfit_gain_residual(ph, e):
+        assert len(ph) == len(e)
+        gain = ph/e
+        pfit_gain = np.polynomial.Polynomial.fit(ph, gain, deg=2)
+        def ph2energy(ph):
+            return ph/pfit_gain(ph)
+        predicted_e = ph2energy(ph)
+        residual_e = e-predicted_e
+        return residual_e, pfit_gain
+
+    def find_best_residual_among_all_possible_assignments(ph, e):
+        assert len(ph) >= len(e)
+        ph=np.sort(ph)
+        assignments_inds = itertools.combinations(np.arange(len(ph)), len(e))
+        best_rms_residual = np.inf
+        best_ph_assigned = None
+        best_residual_e = None
+        for i, assignment_inds in enumerate(assignments_inds):
+            assignment_inds = np.array(assignment_inds)
+            ph_assigned = np.array(ph[assignment_inds])
+            residual_e, pfit_gain = find_pfit_gain_residual(ph_assigned,e)
+            rms_residual = np.std(residual_e)
+            if rms_residual < best_rms_residual:
+                best_rms_residual=rms_residual
+                best_ph_assigned = ph_assigned
+                best_residual_e = residual_e
+                best_assignment_inds = assignment_inds
+        return best_rms_residual, best_ph_assigned, best_residual_e, best_assignment_inds
+
+    return (
+        find_best_residual_among_all_possible_assignments,
+        find_pfit_gain_residual,
+        itertools,
+    )
+
+
+@app.cell
+def __(
+    ch2,
+    find_best_residual_among_all_possible_assignments,
+    find_local_maxima,
+    mass,
+    mo,
+    np,
+    pl,
+    plt,
+):
+    line_names = ["AlKAlpha", "MgKAlpha", "ClKAlpha", "ScKAlpha", "CoKAlpha","MnKAlpha","VKAlpha","CuKAlpha"]
+    uncalibrated_col, calibrated_col = "filtValue", "energy_filtValue"
+    use_expr = pl.col("state_label")=="START"
+    uncalibrated = ch2.good_series(uncalibrated_col, use_expr=use_expr).to_numpy()
+    peak_ph_vals, _peak_heights, (count, bin_centers2, count_smooth) = find_local_maxima(
+        uncalibrated, gaussian_fwhm=50
+    )
+    (names, ee) = mass.algorithms.line_names_and_energies(line_names)
+    n = len(ee)+2
+    best_rms_residual, best_ph_assigned, best_residual_e, best_assignment_inds=find_best_residual_among_all_possible_assignments(peak_ph_vals[:n], ee)
+
+    plt.plot(bin_centers2, count)
+    plt.plot(bin_centers2, count_smooth)
+    plt.plot(peak_ph_vals[:n], _peak_heights[:n],"o")
+    plt.plot(best_ph_assigned, np.zeros(len(best_ph_assigned)),"s")
+    plt.xlabel("ph")
+    plt.ylabel("intensity")
+    plt.title(f"{best_rms_residual=:.2f}")
+    mo.mpl.interactive(plt.gcf())
+
+
+
+    # name_e, energies_out, opt_assignments = mass.algorithms.find_opt_assignment(
+    #     peak_ph_vals,
+    #     line_names=line_names,
+    #     maxacc=0.1,
+    # )
+    # gain = opt_assignments / energies_out
+    # gain_pfit = np.polynomial.Polynomial.fit(opt_assignments, gain, deg=2)
+
+    # def ph2energy(uncalibrated):
+    #     calibrated = uncalibrated / gain_pfit(uncalibrated)
+    #     return calibrated
+
+    # predicted_energies = ph2energy(np.array(opt_assignments))
+    return (
+        best_assignment_inds,
+        best_ph_assigned,
+        best_residual_e,
+        best_rms_residual,
+        bin_centers2,
+        calibrated_col,
+        count,
+        count_smooth,
+        ee,
+        line_names,
+        n,
+        names,
+        peak_ph_vals,
+        uncalibrated,
+        uncalibrated_col,
+        use_expr,
+    )
+
+
+@app.cell
+def __(best_ph_assigned, ee, plt):
+    plt.plot(best_ph_assigned, ee, "o")
+    return
+
+
+@app.cell
+def __(mo, np, plt):
+    fv = np.sort(np.array([7025, 8725, 22575, 26825, 31325, 33625, 36025, 40825, 43175, 48175]))
+    e = np.sort(np.array([1253.635, 1486.69, 4090.699, 4952.216, 5898.802, 6404.01, 6930.38, 8047.83, 8638.91, 9886.52]))
+    pfit = np.polynomial.Polynomial.fit(fv, e, deg=2)
+    pfit_gain = np.polynomial.Polynomial.fit(fv, fv/e, deg=2)
+    fvp = np.hstack([[0], fv])
+    plt.plot(fv, e,"o")
+    plt.plot(fvp, pfit(fvp))
+    plt.plot(fvp, fvp/pfit_gain(fvp))
+    plt.xlabel("fv")
+    plt.ylabel("e")
+    mo.mpl.interactive(plt.gcf())
+    return e, fv, fvp, pfit, pfit_gain
+
+
+@app.cell
+def __(e, fv, mo, pfit, pfit_gain, plt):
+    resid = e-pfit(fv)
+    resid_gain = e-fv/pfit_gain(fv)
+    plt.plot(e, resid,"o", label="residual normal")
+    plt.plot(e, resid_gain,"o", label="resid_gain")
+    plt.legend()
+    mo.mpl.interactive(plt.gcf())
+    return resid, resid_gain
 
 
 @app.cell(hide_code=True)
