@@ -42,13 +42,14 @@ class Channel:
     steps: CalSteps = field(default_factory=CalSteps.new_empty)
     steps_elapsed_s: list[float] = field(default_factory=list)
 
-    def step_plot(self, step_ind):
+    def step_plot(self, step_ind, **kwargs):
         step = self.steps[step_ind]
+        print(step)
         if step_ind + 1 == len(self.df_history):
             df_after = self.df
         else:
             df_after = self.df_history[step_ind + 1]
-        return step.dbg_plot(df_after)
+        return step.dbg_plot(df_after, **kwargs)
 
     def plot_hist(self, col, bin_edges, axis=None):
         return moss.misc.plot_hist_of_series(self.df[col], bin_edges, axis)
@@ -115,9 +116,9 @@ class Channel:
         #     raise Exception(f"too large residuals: {energy_residuals=} eV")
         step = moss.RoughCalibrationStep(
             [uncalibrated_col],
-            calibrated_col,
+            [calibrated_col],
             self.good_expr,
-            ph2energy,
+            use_expr=use_expr,
             line_names=name_e,
             line_energies=energies_out,
             predicted_energies=predicted_energies,
@@ -163,6 +164,7 @@ class Channel:
             good_expr=good_expr,
             df_history=self.df_history,
             steps=self.steps,
+            steps_elapsed_s=self.steps_elapsed_s,
         )
 
     @functools.cache
@@ -174,7 +176,7 @@ class Channel:
             inputs=[col],
             output="many",
             good_expr=self.good_expr,
-            f=None,
+            use_expr=True,
             frametime_s=self.header.frametime_s,
             peak_index=self.typical_peak_ind(col),
             pulse_col=col,
@@ -197,7 +199,8 @@ class Channel:
             .filter(use_expr)
             .select(pulse_col)
             .limit(2000)
-            .collect()[pulse_col]
+            .collect()
+            .to_series()
             .to_numpy()
             .mean(axis=0)
         )
@@ -212,10 +215,9 @@ class Channel:
             inputs=["pulse"],
             output=[peak_x_col, peak_y_col],
             good_expr=self.good_expr,
-            f=None,
+            use_expr=use_expr,
             filter=filter5lag,
             spectrum=spectrum5lag,
-            use_expr=use_expr,
         )
         return self.with_step(step)
 
@@ -241,11 +243,10 @@ class Channel:
         )
         step = DriftCorrectStep(
             inputs=[indicator, uncorrected],
-            output=corrected,
+            output=[corrected],
             good_expr=self.good_expr,
-            f=None,
-            dc=dc,
             use_expr=use_expr,
+            dc=dc,
         )
         return self.with_step(step)
 
@@ -327,12 +328,13 @@ class Channel:
             ) 
     
     def multifit_spline_cal(
-        self, multifit: moss.MultiFit, previous_cal_step_index, calibrated_col
+        self, multifit: moss.MultiFit, previous_cal_step_index, 
+        calibrated_col, use_expr=True
     ):
         import scipy.interpolate
         from scipy.interpolate import CubicSpline
         previous_cal_step = self.steps[previous_cal_step_index]
-        rough_energy_col = previous_cal_step.output
+        rough_energy_col = previous_cal_step.output[0]
         uncalibrated_col = previous_cal_step.inputs[0]
         fits_with_results = multifit.fit_ch(self, col=rough_energy_col)
         multifit_df = fits_with_results.results_params_as_df()
@@ -342,9 +344,9 @@ class Channel:
         spline = CubicSpline(peaks_uncalibrated, peaks_in_energy_reference, bc_type="natural")
         step = moss.MultiFitSplineStep(
             [uncalibrated_col],
-            calibrated_col,
+            [calibrated_col],
             self.good_expr,
-            spline,
+            use_expr,
             spline,
             fits_with_results,
         )

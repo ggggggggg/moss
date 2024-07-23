@@ -11,46 +11,20 @@ import moss
 @dataclass(frozen=True)
 class CalStep:
     inputs: list[str]
-    output: str
+    output: list[str]
     good_expr: pl.Expr
-    f: typing.Callable[..., float]
-
-    def __call__(self, *args, **kwargs) -> float:
-        return self.f(*args, **kwargs)
-
-    def call_by_dict(self, arg_dict) -> float:
-        return self(*arg_dict.values())
-
-    def calc_from_df(self, df):
-        # uses polars map_elements, which is slow as shit apparently
-        # the docs warn that it is slow, and the "correct" way is to implement a
-        # user define function in rust https://docs.pola.rs/api/python/stable/reference/series/api/polars.Series.map_elements.html
-        df2 = df.select(
-            pl.struct(self.inputs)
-            .map_elements(self.call_by_dict, return_dtype=pl.Float32)
-            .alias(self.output)
-        ).with_columns(df)
-        return df2
-
-    def calc_from_df_np(self, df):
-        # only works with in memory data, but just takes it as numpy data and calls function
-        # is much faster than map_elements approach, but wouldn't work with out of core data without some extra book keeping
-        inputs_np = [df[input].to_numpy() for input in self.inputs]
-        out = self.f(*inputs_np)
-        df_out = pl.DataFrame({self.output: out})
-        return df_out
+    use_expr: pl.Expr
 
 
 @dataclass(frozen=True)
 class DriftCorrectStep(CalStep):
     dc: typing.Any
-    use_expr: pl.Expr
 
     def calc_from_df(self, df):
         indicator, uncorrected = self.inputs
         slope, offset = self.dc.slope, self.dc.offset
         df2 = df.select(
-            (pl.col(uncorrected) * (1 + slope * (pl.col(indicator) - offset))).alias(self.output)
+            (pl.col(uncorrected) * (1 + slope * (pl.col(indicator) - offset))).alias(self.output[0])
         ).with_columns(df)
         return df2
 
@@ -61,13 +35,13 @@ class DriftCorrectStep(CalStep):
             df.lazy()
             .filter(self.good_expr)
             .filter(self.use_expr)
-            .select(self.inputs + [self.output])
+            .select(self.inputs + self.output)
             .collect()
         )
         moss.misc.plot_a_vs_b_series(df_small[indicator], df_small[uncorrected])
         moss.misc.plot_a_vs_b_series(
             df_small[indicator],
-            df_small[self.output],
+            df_small[self.output[0]],
             plt.gca(),
         )
         plt.legend()
@@ -83,7 +57,7 @@ class RoughCalibrationGainStep(CalStep):
     gain_pfit: np.polynomial.Polynomial
 
     def dbg_plot(self, df, bin_edges=np.arange(0, 10000, 1), axis=None, plotkwarg={}):
-        series = moss.good_series(df, col=self.output, good_expr=self.good_expr, use_expr=True)
+        series = moss.good_series(df, col=self.output[0], good_expr=self.good_expr, use_expr=True)
         axis = moss.misc.plot_hist_of_series(series, bin_edges)
         axis.plot(self.line_energies, np.zeros(len(self.line_energies)), "o")
         for line_name, energy in zip(self.line_names, self.line_energies):
@@ -100,8 +74,16 @@ class RoughCalibrationStep(CalStep):
     predicted_energies: np.ndarray
     ph2energy: np.polynomial.Polynomial
 
+    def calc_from_df(self, df):
+        # only works with in memory data, but just takes it as numpy data and calls function
+        # is much faster than map_elements approach, but wouldn't work with out of core data without some extra book keeping
+        inputs_np = [df[input].to_numpy() for input in self.inputs]
+        out = self.ph2energy(inputs_np[0])
+        df2 = pl.DataFrame({self.output[0]: out}).with_columns(df)
+        return df2
+
     def dbg_plot(self, df, bin_edges=np.arange(0, 10000, 1), axis=None, plotkwarg={}):
-        series = moss.good_series(df, col=self.output, good_expr=self.good_expr, use_expr=True)
+        series = moss.good_series(df, col=self.output[0], good_expr=self.good_expr, use_expr=self.use_expr)
         axis = moss.misc.plot_hist_of_series(series, bin_edges)
         axis.plot(self.line_energies, np.zeros(len(self.line_energies)), "o")
         for line_name, energy in zip(self.line_names, self.line_energies):
@@ -137,13 +119,15 @@ class SummarizeStep(CalStep):
             for df_iter in df.iter_slices()
         ).with_columns(df)
         return df2
+    
+    def dbg_plot(self, df_after, **kwargs):
+        pass
 
 
 @dataclass(frozen=True)
 class Filter5LagStep(CalStep):
     filter: moss.Filter
     spectrum: moss.NoisePSD
-    use_expr: pl.Expr
 
     def calc_from_df(self, df):
         dfs = []
@@ -185,6 +169,9 @@ class CalSteps:
 
     def __getitem__(self, key):
         return self.steps[key]
+    
+    def __len__(self):
+        return len(self.steps)
 
     # def copy(self):
     #     # copy by creating a new list containing all the entires in the old list
@@ -199,6 +186,14 @@ class CalSteps:
 class MultiFitSplineStep(CalStep):
     ph2energy: callable
     multifit: moss.MultiFit
+
+    def calc_from_df(self, df):
+        # only works with in memory data, but just takes it as numpy data and calls function
+        # is much faster than map_elements approach, but wouldn't work with out of core data without some extra book keeping
+        inputs_np = [df[input].to_numpy() for input in self.inputs]
+        out = self.ph2energy(inputs_np[0])
+        df2 = pl.DataFrame({self.output[0]: out}).with_columns(df)
+        return df2
 
     def dbg_plot(self, df):
         self.multifit.plot_results()
