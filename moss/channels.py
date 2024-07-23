@@ -104,10 +104,13 @@ class Channels:
 
     @classmethod
     def from_ljh_folder(cls, pulse_folder, noise_folder=None, limit=None):
+        import os
+        assert os.path.isdir(pulse_folder),f"{pulse_folder=} {noise_folder=}"
         if noise_folder is None:
             paths = moss.ljhutil.find_ljh_files(pulse_folder)
             pairs = ((path, None) for path in paths)
         else:
+            assert os.path.isdir(noise_folder), f"{pulse_folder=} {noise_folder=}"
             pairs = moss.ljhutil.match_files_by_channel(pulse_folder, noise_folder, limit=limit)
         description = f"from_ljh_folder {pulse_folder=} {noise_folder=}"
         return cls.from_ljh_path_pairs(pairs, description)

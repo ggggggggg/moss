@@ -8,7 +8,10 @@ authors = [
 dependencies = [
     "polars",
     "scipy",
-    "numpy","ipympl","matplotlib","itables"
+    "numpy","ipympl","matplotlib","itables",
+    "marimo", # good notebooks!
+    "tornado",# for matplotlib plots in marimo
+    "numba"
 ]
 
 [project.optional-dependencies]

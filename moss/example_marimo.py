@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.7.1"
+__generated_with = "0.7.9"
 app = marimo.App(width="medium", app_title="MOSS intro")
 
 
@@ -48,8 +48,8 @@ def __(mo):
 
 
 @app.cell
-def __(mo, moss, pl):
-    _root_path = r"C:\Users\oneilg\Desktop\python\src\mass\tests\ljh_files"
+def __(massroot, mo, moss, pl):
+    _root_path = massroot
     _extensions = ["ljh"]
     _folders = moss.ljhutil.find_folders_with_extension(_root_path, _extensions)
     _df = pl.DataFrame({"folder": _folders})
@@ -74,14 +74,25 @@ def __(mo):
 
 
 @app.cell
-def __(noise_table, pulse_table):
+def __():
+    import mass 
+    import os
+    massroot = os.path.split(os.path.split(mass.__file__)[0])[0]
+    massroot
+    return mass, massroot, os
+
+
+@app.cell
+def __(massroot, noise_table, os, pulse_table):
     if len(noise_table.value) == 1 and len(pulse_table.value) >= 1:
         noise_folder = noise_table.value["folder"][0]
         pulse_folders = pulse_table.value["folder"]
         pulse_folder = pulse_folders[0]
     else:
-        noise_folder = "C:\\Users\\oneilg\\Desktop\\python\\src\\mass\\tests\\ljh_files\\20230626\\0000"
-        pulse_folder = "C:\\Users\\oneilg\\Desktop\\python\\src\\mass\\tests\\ljh_files\\20230626\\0001"
+        noise_folder = os.path.join(massroot,"tests","ljh_files","20230626","0000")
+        pulse_folder = os.path.join(massroot,"tests","ljh_files","20230626","0001")
+
+
     return noise_folder, pulse_folder, pulse_folders
 
 
@@ -101,6 +112,7 @@ def __(moss, noise_folder, pulse_folder):
     data = moss.Channels.from_ljh_folder(
         pulse_folder=pulse_folder, noise_folder=noise_folder
     )
+    data
     return data,
 
 
@@ -241,9 +253,9 @@ def __(mo):
 
 
 @app.cell
-def __(data):
+def __(data, mo):
     ch = data.channels[4102]
-    ch.df
+    mo.plain(ch.df)
     return ch,
 
 
@@ -268,13 +280,13 @@ def __(mo):
 
 
 @app.cell
-def __(ch, steps):
+def __(ch, mo, steps):
     step = steps[0]
     _ch = ch
     for step in steps:
         _ch = _ch.with_step(step)
     ch2 = _ch
-    ch2.df
+    mo.plain(ch2.df)
     return ch2, step
 
 
