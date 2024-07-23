@@ -125,6 +125,9 @@ class Channels:
         df_es = _df.select(pl.from_epoch(_col0, time_unit="ns").dt.cast_time_unit("us").alias("timestamp")).with_columns(
             _df.select(pl.col(_col1).alias("state_label"))
         )
+        # strip whitespace from state_label column
+        df_es = (df_es.select(pl.col("state_label").str.strip_chars())
+        .with_columns(df_es.select(pl.exclude("state_label"))))
         return df_es
     
     def with_experiment_state_by_path(self, experiment_state_path=None):

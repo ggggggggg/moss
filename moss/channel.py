@@ -57,10 +57,11 @@ class Channel:
         return moss.good_series(self.df, col, self.good_expr, use_expr)
 
     def rough_cal_gain(
-        self, line_names, uncalibrated_col, calibrated_col, ph_smoothing_fwhm
+        self, line_names, uncalibrated_col, calibrated_col, ph_smoothing_fwhm,
+        use_expr=True
     ):
         # this is meant to filter the data, then select down to the columsn we need, then materialize them, all without copying our pulse records again
-        uncalibrated = self.good_series(uncalibrated_col, use_expr=True).to_numpy()
+        uncalibrated = self.good_series(uncalibrated_col, use_expr=use_expr).to_numpy()
         peak_ph_vals, _peak_heights = mass.algorithms.find_local_maxima(
             uncalibrated, gaussian_fwhm=ph_smoothing_fwhm
         )
@@ -93,10 +94,11 @@ class Channel:
         return self.with_step(step)
     
     def rough_cal(
-        self, line_names, uncalibrated_col, calibrated_col, ph_smoothing_fwhm
+        self, line_names, uncalibrated_col, calibrated_col, ph_smoothing_fwhm,
+        use_expr=True
     ):
         # this is meant to filter the data, then select down to the columsn we need, then materialize them, all without copying our pulse records again
-        uncalibrated = self.good_series(uncalibrated_col, use_expr=True).to_numpy()
+        uncalibrated = self.good_series(uncalibrated_col, use_expr=use_expr).to_numpy()
         peak_ph_vals, _peak_heights = mass.algorithms.find_local_maxima(
             uncalibrated, gaussian_fwhm=ph_smoothing_fwhm
         )

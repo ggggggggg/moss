@@ -29,7 +29,7 @@ def find_folders_with_extension(root_path: str, extensions: List[str]) -> List[s
 
     return list(matching_folders)
 
-def find_ljh_files(folder: str) -> List[str]:
+def find_ljh_files(folder: str, ext:str = ".ljh") -> List[str]:
     """
     Finds all .ljh files in the given folder and its subfolders.
 
@@ -42,7 +42,7 @@ def find_ljh_files(folder: str) -> List[str]:
     ljh_files = []
     for dirpath, _, filenames in os.walk(folder):
         for filename in filenames:
-            if filename.endswith('.ljh'):
+            if filename.endswith(ext):
                 ljh_files.append(os.path.join(dirpath, filename))
     return ljh_files
 
