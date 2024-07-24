@@ -113,30 +113,36 @@ def __(ch, mo, pl, plt):
 
 
 @app.cell
-def __(ch, moss, np, pl):
-    # Import library
-    from findpeaks import findpeaks
+def __(moss, np):
+    def find_local_maxima(pulse_heights, gaussian_fwhm):
+        """Smears each pulse by a gaussian of gaussian_fhwm and finds local maxima,
+        returns a list of their locations in pulse_height units (sorted by number of
+        pulses in peak) AND their peak values as: (peak_locations, peak_intensities)
 
-    bin_centers, counts = moss.misc.hist_of_series(ch.good_series("filtValue", use_expr=pl.col("state_label")=="START"), np.arange(0,50000,50))
+        Args:
+            pulse_heights (np.array(dtype=float)): a list of pulse heights (eg p_filt_value)
+            gaussian_fwhm = fwhm of a gaussian that each pulse is smeared with, in same units as pulse heights
+        """
+        # kernel density estimation (with a gaussian kernel)
+        n = 128 * 1024
+        gaussian_fwhm = float(gaussian_fwhm)
+        # The above ensures that lo & hi are floats, so that (lo-hi)/n is always a float in python2
+        sigma = gaussian_fwhm / (np.sqrt(np.log(2) * 2) * 2)
+        tbw = 1.0 / sigma / (np.pi * 2)
+        lo = np.min(pulse_heights) - 3 * gaussian_fwhm
+        hi = np.max(pulse_heights) + 3 * gaussian_fwhm
+        hist, bins = np.histogram(pulse_heights, np.linspace(lo, hi, n + 1))
+        tx = np.fft.rfftfreq(n, (lo - hi) / n)
+        ty = np.exp(-tx**2 / 2 / tbw**2)
+        x = (bins[1:] + bins[:-1]) / 2
+        y = np.fft.irfft(np.fft.rfft(hist) * ty)
 
-    # Initialized
-    fp = findpeaks(method='peakdetect', whitelist=["peak"], lookahead=5, verbose=0 )
-
-    # Example data:
-    X = fp.import_example('1dpeaks')
-
-    # Peak detection
-    results = fp.fit(counts)
-
-    # Plot
-    fp.plot()
-    return X, bin_centers, counts, findpeaks, fp, results
-
-
-@app.cell
-def __(results):
-    results
-    return
+        flag = (y[1:-1] > y[:-2]) & (y[1:-1] > y[2:])
+        lm = np.arange(1, n - 1)[flag]
+        lm = lm[np.argsort(-y[lm])]
+        bin_centers, step_size = moss.misc.midpoints_and_step_size(bins)
+        return np.array(x[lm]), np.array(y[lm]), (hist, bin_centers, y)
+    return find_local_maxima,
 
 
 @app.cell
@@ -152,12 +158,16 @@ def __(moss, np, plt):
         local_maxima_inds: np.ndarray # inds into bin_centers
 
         def inds_sorted_by_peak_height(self):
-            lm = self.local_maxima_inds
-            return lm[np.argsort(-self.peak_height())]
+            return self.local_maxima_inds[np.argsort(-self.peak_height())]
 
         def inds_sorted_by_prominence(self):
-            lm = self.local_maxima_inds
-            return lm[np.argsort(-self.prominence())]
+            return self.local_maxima_inds[np.argsort(-self.prominence())]
+
+        def ph_sorted_by_prominence(self):
+            return self.bin_centers[self.inds_sorted_by_prominence()]
+
+        def ph_sorted_by_peak_height(self):
+            return self.bin_centers[self.inds_sorted_by_peak_height()]
 
         def peak_height(self):
             return self.smoothed_counts[self.local_maxima_inds]
@@ -166,7 +176,7 @@ def __(moss, np, plt):
             peak_height = self.peak_height()
             return np.diff(peak_height, prepend=0)-np.diff(peak_height,append=0)
 
-        def plot(self, n_highlight=10, plot_counts=False, ax=None):
+        def plot(self, assignment_result=None, n_highlight=10, plot_counts=False, ax=None):
             if ax is None:
                 plt.figure()
                 ax = plt.gca()
@@ -177,18 +187,35 @@ def __(moss, np, plt):
             ax.plot(self.bin_centers, self.smoothed_counts, label="smoothed_counts")
             ax.plot(self.bin_centers[self.local_maxima_inds],
                    self.smoothed_counts[self.local_maxima_inds],".",
-                   label="peaks")
-            ax.plot(self.bin_centers[inds_prominence],
-                   self.smoothed_counts[inds_prominence],"o",
-                   label=f"{n_highlight} most prominent")
-            ax.plot(self.bin_centers[inds_peak_height],
-                   self.smoothed_counts[inds_peak_height],"v",
-                   label=f"{n_highlight} highest")        
+                   label="peaks") 
+            if assignment_result is not None:
+                inds_assigned = np.searchsorted(self.bin_centers, assignment_result.ph_assigned)
+                inds_unassigned = np.searchsorted(self.bin_centers, assignment_result.ph_unassigned())
+                bin_centers_assigned = self.bin_centers[inds_assigned]
+                bin_centers_unassigned = self.bin_centers[inds_unassigned]
+                smoothed_counts_assigned = self.smoothed_counts[inds_assigned]
+                smoothed_counts_unassigned = self.smoothed_counts[inds_unassigned]
+                ax.plot(bin_centers_assigned, smoothed_counts_assigned,"o",label="assigned")
+                ax.plot(bin_centers_unassigned, smoothed_counts_unassigned,"o",label="unassigned")
+                for name, x, y in zip(assignment_result.names_target, bin_centers_assigned, smoothed_counts_assigned):
+                    ax.annotate(str(name), (x,y), rotation=30)
+                ax.set_title(f"SmoothedLocalMaximaResult rms_residual={assignment_result.rms_residual:.2f} eV")
+
+            else:
+                ax.plot(self.bin_centers[inds_prominence],
+                self.smoothed_counts[inds_prominence],"o",
+                label=f"{n_highlight} most prominent")
+                ax.plot(self.bin_centers[inds_peak_height],
+                self.smoothed_counts[inds_peak_height],"v",
+                label=f"{n_highlight} highest")     
+                ax.set_title("SmoothedLocalMaximaResult")
+
             ax.legend()
             ax.set_xlabel("pulse height")
             ax.set_ylabel("intensity")
-            ax.set_title("SmoothedLocalMaximaResult")
-            ax.set_ylim(0.1, ax.get_ylim()[1])
+            ax.set_ylim(1/self.fwhm_pulse_height_units, ax.get_ylim()[1])
+      
+
             return ax
 
     def smooth_hist_with_gauassian_by_fft(hist, fwhm_in_bin_number_units):
@@ -232,44 +259,30 @@ def __(moss, np, plt):
 
 
 @app.cell
-def __(moss, np):
-    def find_local_maxima(pulse_heights, gaussian_fwhm):
-        """Smears each pulse by a gaussian of gaussian_fhwm and finds local maxima,
-        returns a list of their locations in pulse_height units (sorted by number of
-        pulses in peak) AND their peak values as: (peak_locations, peak_intensities)
-
-        Args:
-            pulse_heights (np.array(dtype=float)): a list of pulse heights (eg p_filt_value)
-            gaussian_fwhm = fwhm of a gaussian that each pulse is smeared with, in same units as pulse heights
-        """
-        # kernel density estimation (with a gaussian kernel)
-        n = 128 * 1024
-        gaussian_fwhm = float(gaussian_fwhm)
-        # The above ensures that lo & hi are floats, so that (lo-hi)/n is always a float in python2
-        sigma = gaussian_fwhm / (np.sqrt(np.log(2) * 2) * 2)
-        tbw = 1.0 / sigma / (np.pi * 2)
-        lo = np.min(pulse_heights) - 3 * gaussian_fwhm
-        hi = np.max(pulse_heights) + 3 * gaussian_fwhm
-        hist, bins = np.histogram(pulse_heights, np.linspace(lo, hi, n + 1))
-        tx = np.fft.rfftfreq(n, (lo - hi) / n)
-        ty = np.exp(-tx**2 / 2 / tbw**2)
-        x = (bins[1:] + bins[:-1]) / 2
-        y = np.fft.irfft(np.fft.rfft(hist) * ty)
-
-        flag = (y[1:-1] > y[:-2]) & (y[1:-1] > y[2:])
-        lm = np.arange(1, n - 1)[flag]
-        lm = lm[np.argsort(-y[lm])]
-        bin_centers, step_size = moss.misc.midpoints_and_step_size(bins)
-        return np.array(x[lm]), np.array(y[lm]), (hist, bin_centers, y)
-    return find_local_maxima,
+def __(ch2, mass, peakfind_local_maxima_of_smoothed_hist, pl):
+    line_names = ["AlKAlpha", "MgKAlpha", "ClKAlpha", "ScKAlpha", "CoKAlpha","MnKAlpha","VKAlpha","CuKAlpha"]
+    uncalibrated_col, calibrated_col = "filtValue", "energy_filtValue"
+    use_expr = pl.col("state_label")=="START"
+    (names, ee) = mass.algorithms.line_names_and_energies(line_names)
+    uncalibrated = ch2.good_series(uncalibrated_col, use_expr=use_expr).to_numpy()
+    pfresult = peakfind_local_maxima_of_smoothed_hist(uncalibrated, fwhm_pulse_height_units=50)
+    return (
+        calibrated_col,
+        ee,
+        line_names,
+        names,
+        pfresult,
+        uncalibrated,
+        uncalibrated_col,
+        use_expr,
+    )
 
 
 @app.cell
-def __(mo, peakfind_local_maxima_of_smoothed_hist, plt, uncalibrated):
-    pfresult = peakfind_local_maxima_of_smoothed_hist(uncalibrated, fwhm_pulse_height_units=50)
-    pfresult.plot()
+def __(assignment_result, mo, pfresult, plt):
+    pfresult.plot(assignment_result)
     mo.mpl.interactive(plt.gcf())
-    return pfresult,
+    return
 
 
 @app.cell
@@ -282,8 +295,8 @@ def __(
     plt,
 ):
     _n=len(ee) + 3
-    assignment_result = find_best_residual_among_all_possible_assignments2(pfresult.inds_sorted_by_prominence()[:_n], ee)
-    assignment_result.plot(names)
+    assignment_result = find_best_residual_among_all_possible_assignments2(pfresult.ph_sorted_by_prominence()[:_n], ee, names)
+    assignment_result.plot()
     mo.mpl.interactive(plt.gcf())
     return assignment_result,
 
@@ -300,9 +313,13 @@ def __(dataclass, np, plt):
         assignment_inds: np.ndarray
         pfit_gain: np.polynomial.Polynomial
         energy_target: np.ndarray
-        ph_target: np.ndarray
+        names_target: list[str] # list of strings with names for the energies in energy_target
+        ph_target: np.ndarry # longer than energy target by 0-3
 
-        def plot(self, names=None, ax=None):
+        def ph_unassigned(self):
+            return np.array(list(set(self.ph_target)-set(self.ph_assigned)))
+        
+        def plot(self, ax=None):
             if ax is None:
                 plt.figure()
                 ax=plt.gca()
@@ -312,10 +329,9 @@ def __(dataclass, np, plt):
             ax.set_xlabel("pulse_height")
             ax.set_ylabel("gain")
             ax.set_title(f"BestAssignmentPfitGainResult rms_residual={self.rms_residual:.2f} eV")
-            if names is not None:
-                assert len(names) == len(self.ph_assigned)
-                for name, x, y in zip(names, self.ph_assigned, gain):
-                    ax.annotate(str(name), (x,y))
+            assert len(self.names_target) == len(self.ph_assigned)
+            for name, x, y in zip(self.names_target, self.ph_assigned, gain):
+                ax.annotate(str(name), (x,y))
 
     def find_pfit_gain_residual(ph, e):
         assert len(ph) == len(e)
@@ -327,9 +343,9 @@ def __(dataclass, np, plt):
         residual_e = e-predicted_e
         return residual_e, pfit_gain
 
-    def find_best_residual_among_all_possible_assignments2(ph, e):
+    def find_best_residual_among_all_possible_assignments2(ph, e, names):
         best_rms_residual, best_ph_assigned, best_residual_e, best_assignment_inds, best_pfit = find_best_residual_among_all_possible_assignments(ph,e)
-        return BestAssignmentPfitGainResult(best_rms_residual, best_ph_assigned, best_residual_e, best_assignment_inds, best_pfit, e, ph)
+        return BestAssignmentPfitGainResult(best_rms_residual, best_ph_assigned, best_residual_e, best_assignment_inds, best_pfit, e, names, ph)
 
     def find_best_residual_among_all_possible_assignments(ph, e):
         assert len(ph) >= len(e)
@@ -358,83 +374,6 @@ def __(dataclass, np, plt):
         find_pfit_gain_residual,
         itertools,
     )
-
-
-@app.cell
-def __(
-    ch2,
-    find_best_residual_among_all_possible_assignments,
-    find_local_maxima,
-    mass,
-    mo,
-    np,
-    pl,
-    plt,
-):
-    line_names = ["AlKAlpha", "MgKAlpha", "ClKAlpha", "ScKAlpha", "CoKAlpha","MnKAlpha","VKAlpha","CuKAlpha"]
-    uncalibrated_col, calibrated_col = "filtValue", "energy_filtValue"
-    use_expr = pl.col("state_label")=="START"
-    uncalibrated = ch2.good_series(uncalibrated_col, use_expr=use_expr).to_numpy()
-    peak_ph_vals, _peak_heights, (count, bin_centers2, count_smooth) = find_local_maxima(
-        uncalibrated, gaussian_fwhm=50
-    )
-
-    (names, ee) = mass.algorithms.line_names_and_energies(line_names)
-    n = len(ee)+2
-    best_rms_residual, best_ph_assigned, best_residual_e, best_assignment_inds, best_pfit =find_best_residual_among_all_possible_assignments(peak_ph_vals[:n], ee)
-
-    plt.plot(bin_centers2, count)
-    plt.plot(bin_centers2, count_smooth)
-    plt.plot(peak_ph_vals[:n], _peak_heights[:n],"o")
-    plt.plot(best_ph_assigned, np.zeros(len(best_ph_assigned)),"s")
-    plt.xlabel("ph")
-    plt.ylabel("intensity")
-    plt.title(f"{best_rms_residual=:.2f}")
-    mo.mpl.interactive(plt.gcf())
-
-
-
-    # name_e, energies_out, opt_assignments = mass.algorithms.find_opt_assignment(
-    #     peak_ph_vals,
-    #     line_names=line_names,
-    #     maxacc=0.1,
-    # )
-    # gain = opt_assignments / energies_out
-    # gain_pfit = np.polynomial.Polynomial.fit(opt_assignments, gain, deg=2)
-
-    # def ph2energy(uncalibrated):
-    #     calibrated = uncalibrated / gain_pfit(uncalibrated)
-    #     return calibrated
-
-    # predicted_energies = ph2energy(np.array(opt_assignments))
-    return (
-        best_assignment_inds,
-        best_pfit,
-        best_ph_assigned,
-        best_residual_e,
-        best_rms_residual,
-        bin_centers2,
-        calibrated_col,
-        count,
-        count_smooth,
-        ee,
-        line_names,
-        n,
-        names,
-        peak_ph_vals,
-        uncalibrated,
-        uncalibrated_col,
-        use_expr,
-    )
-
-
-@app.cell
-def __(best_pfit, best_ph_assigned, ee, plt):
-    plt.plot(best_ph_assigned, best_ph_assigned/ee, "o")
-    plt.plot(best_ph_assigned, best_pfit(best_ph_assigned))
-    plt.xlabel("ph")
-    plt.ylabel("gain")
-    return
 
 
 @app.cell
