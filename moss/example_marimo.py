@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.7.9"
+__generated_with = "0.7.11"
 app = marimo.App(width="medium", app_title="MOSS intro")
 
 
@@ -91,8 +91,6 @@ def __(massroot, noise_table, os, pulse_table):
     else:
         noise_folder = os.path.join(massroot,"tests","ljh_files","20230626","0000")
         pulse_folder = os.path.join(massroot,"tests","ljh_files","20230626","0001")
-
-
     return noise_folder, pulse_folder, pulse_folders
 
 
@@ -228,7 +226,7 @@ def __(result):
 
 @app.cell
 def __(mo):
-    mo.md(r"# plot a noise spectrum")
+    mo.md(r"""# plot a noise spectrum""")
     return
 
 
@@ -292,7 +290,7 @@ def __(ch, mo, steps):
 
 @app.cell
 def __(mo):
-    mo.md("# make sure the results are the same!")
+    mo.md("""# make sure the results are the same!""")
     return
 
 
@@ -333,7 +331,7 @@ def __(data, data2, mo, np):
 
 @app.cell
 def __(mo):
-    mo.md("# step plots")
+    mo.md("""# step plots""")
     return
 
 
@@ -550,7 +548,7 @@ def __(data4):
 
 @app.cell
 def __(mo):
-    mo.md(r"# final coadded spectrum")
+    mo.md(r"""# final coadded spectrum""")
     return
 
 
