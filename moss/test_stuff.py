@@ -2,14 +2,13 @@ import pytest
 import moss
 import os
 import mass
+import pulsedata 
 
-massroot = os.path.split(os.path.split(mass.__file__)[0])[0]
 
-noise_path = os.path.join(massroot,r"tests\ljh_files\20230626\0000\20230626_run0000_chan4102.ljh")
-pulse_path = os.path.join(massroot,r"tests\ljh_files\20230626\0001\20230626_run0001_chan4102.ljh")
 
 def test_to_df():
-    ljh_noise = moss.LJHFile(noise_path)
+    p = pulsedata.pulse_noise_ljh_pairs["20230626"]
+    ljh_noise = moss.LJHFile(p.noise_folder/"20230626_run0000_chan4102.ljh")
     df_noise, header_df_noise = ljh_noise.to_polars()
-    ljh = moss.LJHFile(pulse_path)
+    ljh = moss.LJHFile(p.pulse_folder/"20230626_run0001_chan4102.ljh")
     df, header_df = ljh.to_polars()

@@ -24,74 +24,14 @@ def __():
     import pylab as plt
     import numpy as np
     import marimo as mo
-    return mo, np, pl, plt
+    import pulsedata
+    return mo, np, pl, plt, pulsedata
 
 
 @app.cell
 def __():
     import moss
     return moss,
-
-
-@app.cell(disabled=True)
-def __(mo):
-    file_browser = mo.ui.file_browser(
-        initial_path=r"C:\Users\oneilg\Desktop\python\src\mass\tests\ljh_files",
-        multiple=True,
-        label="pick microcal data directory",
-        selection_mode="directory",
-    )
-    mo.md(
-        f"# File Picker\npick microcal data directory\nthe top line should be the folder that contains all the folders you want to search for data\n{file_browser}"
-    )
-    return file_browser,
-
-
-@app.cell
-def __(massroot, mo, moss, pl):
-    _root_path = massroot
-    _extensions = ["ljh"]
-    _folders = moss.ljhutil.find_folders_with_extension(_root_path, _extensions)
-    _df = pl.DataFrame({"folder": _folders})
-    pulse_table = mo.ui.table(_df, label="puck pulse files")
-    noise_table = mo.ui.table(_df, label="pick noise file", selection="single")
-    start_button = mo.ui.run_button(label="submit file choices")
-    mo.md(
-        f"#File Picker\nMarimo suports very easy reactive UI. You should read the docs. The you can can try it out here if you want. You can edit the line defining `_root_path` to point to a folder with LJH files, and the above ui element will update. Then pick one noise file and one pulse file and the rest of the notebook will update. Though the calibration will likely break since the actual lines chosen will be wrong. So maybe come back here later.\npick files for noise \n{noise_table}\n#pick files for pulses \n{pulse_table}\nthen click {start_button}"
-    )
-    return noise_table, pulse_table, start_button
-
-
-@app.cell
-def __(mo):
-    mo.md(
-        """
-        # file picker overide
-        below here we manually define some default ljh files for this notebook to work on, but if you use the file picker it will override the default values.
-        """
-    )
-    return
-
-
-@app.cell
-def __():
-    import mass 
-    import os
-    massroot = os.path.split(os.path.split(mass.__file__)[0])[0]
-    massroot
-    return mass, massroot, os
-
-
-@app.cell
-def __(massroot, noise_table, os, pulse_table):
-    if len(noise_table.value) == 1 and len(pulse_table.value) >= 1:
-        noise_folder = noise_table.value["folder"][0]
-        pulse_folders = pulse_table.value["folder"]
-        pulse_folder = pulse_folders[0]
-    else:
-        noise_folder = os.path.join(massroot,"tests","ljh_files","20230626","0000")
-        pulse_folder = os.path.join(massroot,"tests","ljh_files","20230626","0001")
-    return noise_folder, pulse_folder, pulse_folders
 
 
 @app.cell
@@ -106,9 +46,10 @@ def __(mo):
 
 
 @app.cell
-def __(moss, noise_folder, pulse_folder):
+def __(moss, pulsedata):
+    _p = pulsedata.pulse_noise_ljh_pairs["20230626"]
     data = moss.Channels.from_ljh_folder(
-        pulse_folder=pulse_folder, noise_folder=noise_folder
+        pulse_folder=_p.pulse_folder, noise_folder=_p.noise_folder
     )
     data
     return data,
@@ -304,6 +245,7 @@ def __(ch2, data2):
 def __(ch2):
     # to help you remember not to mutate, everything is as immutable as python will allow! assignment throws!
     from dataclasses import FrozenInstanceError
+
     try:
         ch2.df = 4
     except FrozenInstanceError:
@@ -490,7 +432,11 @@ def __(multifit_with_results):
 
 @app.cell
 def __(data3, multifit):
-    data4= data3.transform_channels(lambda ch: ch.multifit_spline_cal(multifit, previous_cal_step_index=5, calibrated_col="energy2_5lagy_dc"))
+    data4 = data3.transform_channels(
+        lambda ch: ch.multifit_spline_cal(
+            multifit, previous_cal_step_index=5, calibrated_col="energy2_5lagy_dc"
+        )
+    )
     return data4,
 
 
@@ -503,7 +449,7 @@ def __(data4, mo, plt):
 
 @app.cell
 def __(data4):
-    steps_dict = {ch_num:ch.steps for ch_num, ch in data4.channels.items()}
+    steps_dict = {ch_num: ch.steps for ch_num, ch in data4.channels.items()}
     return steps_dict,
 
 
@@ -515,7 +461,9 @@ def __(moss, steps_dict):
 
 @app.cell
 def __(data4):
-    data4.dfg().select("timestamp", "energy2_5lagy_dc", "state_label", "ch_num").write_parquet("example_result.parquet")
+    data4.dfg().select(
+        "timestamp", "energy2_5lagy_dc", "state_label", "ch_num"
+    ).write_parquet("example_result.parquet")
     return
 
 
@@ -534,7 +482,7 @@ def __(mo):
 def __(ch):
     # here we concatenate two channels and check that the length has double
     ch_concat = ch.concat_ch(ch)
-    assert 2*len(ch.df) == len(ch_concat.df)
+    assert 2 * len(ch.df) == len(ch_concat.df)
     return ch_concat,
 
 
@@ -542,7 +490,7 @@ def __(ch):
 def __(data4):
     # here we concatenate two `Channels` objects and check that the length of the resulting dfg (remember, this is the df of good pulses) has doubled
     data_concat = data4.concat_data(data4)
-    assert 2*len(data4.dfg())==len(data_concat.dfg())
+    assert 2 * len(data4.dfg()) == len(data_concat.dfg())
     return data_concat,
 
 
@@ -554,7 +502,7 @@ def __(mo):
 
 @app.cell
 def __(data4, mo, plt):
-    _result = data4.linefit("MnKAlpha",col="energy2_5lagy_dc")
+    _result = data4.linefit("MnKAlpha", col="energy2_5lagy_dc")
     _result.plotm()
     mo.mpl.interactive(plt.gcf())
     return
@@ -562,7 +510,7 @@ def __(data4, mo, plt):
 
 @app.cell
 def __(data2):
-    ch6=data2.channels[4102]
+    ch6 = data2.channels[4102]
     return ch6,
 
 

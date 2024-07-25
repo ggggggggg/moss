@@ -16,22 +16,10 @@ def __():
 @app.cell
 def __():
     import moss
-    return moss,
-
-
-@app.cell
-def __():
-    import mass 
-    import os
-    massroot = os.path.split(os.path.split(mass.__file__)[0])[0]
-    massroot
-    return mass, massroot, os
-
-
-@app.cell
-def __():
-    off_folder = r"C:\Users\oneilg\Downloads\ebit_20240722_0006"
-    return off_folder,
+    import pulsedata
+    import mass
+    import pathlib
+    return mass, moss, pathlib, pulsedata
 
 
 @app.cell
@@ -46,9 +34,8 @@ def __(mo):
 
 
 @app.cell
-def __(mass, moss, off_folder):
-    off_paths = moss.ljhutil.find_ljh_files(off_folder,".off")
-    off_paths
+def __(mass, moss, pulsedata):
+    off_paths = moss.ljhutil.find_ljh_files(str(pulsedata.off["ebit_20240722_0006"]), ext=".off")
     off = mass.off.OffFile(off_paths[0])
     return off, off_paths
 
@@ -85,8 +72,8 @@ def __(from_off_paths, moss, off_paths):
 
 
 @app.cell
-def __(data, mo):
-    data2 = data.with_experiment_state_by_path(r"C:\Users\oneilg\Downloads\ebit_20240722_0006\ebit_20240722_0006\20240722_run0006_experiment_state.txt")
+def __(data, mo, off_paths, pathlib):
+    data2 = data.with_experiment_state_by_path(pathlib.Path(off_paths[0]).parent /"20240722_run0006_experiment_state.txt")
     mo.plain(data2.channels[1].df)
     return data2,
 
@@ -214,7 +201,7 @@ def __(moss, np, plt):
             ax.set_xlabel("pulse height")
             ax.set_ylabel("intensity")
             ax.set_ylim(1/self.fwhm_pulse_height_units, ax.get_ylim()[1])
-      
+
 
             return ax
 
@@ -318,7 +305,7 @@ def __(dataclass, np, plt):
 
         def ph_unassigned(self):
             return np.array(list(set(self.ph_target)-set(self.ph_assigned)))
-        
+
         def plot(self, ax=None):
             if ax is None:
                 plt.figure()
