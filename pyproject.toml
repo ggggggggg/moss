@@ -12,8 +12,8 @@ dependencies = [
     "marimo", # good notebooks!
     "tornado",# for matplotlib plots in marimo
     "numba",
-    "pulsedata @ git+https://github.com/ggggggggg/pulsedata#egg=pulsedata"
-
+    "pulsedata @ git+https://github.com/ggggggggg/pulsedata#egg=pulsedata",
+    "pytest",
 ]
 
 [project.optional-dependencies]
