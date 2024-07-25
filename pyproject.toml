@@ -11,7 +11,8 @@ dependencies = [
     "numpy","ipympl","matplotlib","itables",
     "marimo", # good notebooks!
     "tornado",# for matplotlib plots in marimo
-    "numba"
+    "numba",
+    "pytest"
 ]
 
 [project.optional-dependencies]
