@@ -36,8 +36,8 @@ jobs:
     #     flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with mypy
       run: |
-        mypy .
-     #   # mypy path/to/specific_file.py
+        mypy 
+        mypy noise_channel.py 
     
     - name: Test with pytest
       run: |

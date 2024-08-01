@@ -1,5 +1,5 @@
 import numpy as np
-import pylab as plt
+import pylab as plt #type: ignore
 from dataclasses import dataclass, field
 from numpy import ndarray
 from typing import Tuple
