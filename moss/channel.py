@@ -7,6 +7,7 @@ import moss
 from moss import NoiseChannel, CalSteps, DriftCorrectStep, SummarizeStep, Filter5LagStep
 import typing
 import numpy as np
+from typing import Union
 import time
 import mass
 
@@ -35,7 +36,7 @@ class Channel:
     df: pl.DataFrame | pl.LazyFrame = field(repr=False)
     header: ChannelHeader = field(repr=True)
     noise: typing.Optional[NoiseChannel] = field(default=None, repr=False)
-    good_expr: bool | pl.Expr = True
+    good_expr: pl.Expr = True #changed from bool | pl.Expr to just pl.Expr
     df_history: list[pl.DataFrame | pl.LazyFrame] = field(
         default_factory=list, repr=False
     )
