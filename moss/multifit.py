@@ -122,9 +122,9 @@ class MultiFit:
     def fit_ch(self, ch, col: str):
         return self.fit_df(ch.df, col, ch.good_expr)
 
-    def plot_results(self):
+    def plot_results(self, n_extra_axes=0):
         assert self.results is not None
-        n = len(self.results)
+        n = len(self.results)+n_extra_axes
         cols = min(3, n)
         rows = math.ceil(n / cols)
         fig, axes = plt.subplots(
@@ -143,15 +143,122 @@ class MultiFit:
             result.plotm(ax=ax)
 
         # Hide any remaining empty subplots
-        for ax in axes[len(self.results) :]:
+        for ax in axes[n:]:
             ax.axis("off")
 
         plt.tight_layout()
         return fig, axes
     
+    def plot_results_and_pfit(self, uncalibrated_name, previous_energy2ph, n_extra_axes=0):
+        fig, axes = self.plot_results(n_extra_axes=1+n_extra_axes)
+        ax = axes[len(self.results)]
+        multifit_df = self.results_params_as_df()
+        peaks_in_energy_rough_cal = multifit_df["peak_ph"].to_numpy()
+        peaks_uncalibrated = np.array([previous_energy2ph(e) for e in peaks_in_energy_rough_cal])
+        peaks_in_energy_reference = multifit_df["peak_energy_ref"].to_numpy()
+        pfit_gain, rms_residual_energy = self.to_pfit_gain(previous_energy2ph)
+        plt.sca(ax)
+        x = np.linspace(0, np.amax(peaks_uncalibrated))
+        plt.plot(x, pfit_gain(x), label="fit")
+        gain = peaks_uncalibrated/peaks_in_energy_reference
+        plt.plot(peaks_uncalibrated, gain, "o")
+        plt.xlabel(uncalibrated_name)
+        plt.ylabel("gain")
+        plt.title(f"{rms_residual_energy=:.3f}")
+        for name, x, y in zip(multifit_df["line"], peaks_uncalibrated, gain):
+            ax.annotate(str(name), (x,y))
+        return axes
+
+    def to_pfit_gain(self, previous_energy2ph):
+        multifit_df = self.results_params_as_df()
+        peaks_in_energy_rough_cal = multifit_df["peak_ph"].to_numpy()
+        peaks_uncalibrated = np.array([previous_energy2ph(e) for e in peaks_in_energy_rough_cal])
+        peaks_in_energy_reference = multifit_df["peak_energy_ref"].to_numpy()
+        gain = peaks_uncalibrated/peaks_in_energy_reference
+        pfit_gain = np.polynomial.Polynomial.fit(peaks_uncalibrated, gain, deg=2)
+        def ph2energy(ph):
+            gain = pfit_gain(ph)
+            return ph/gain
+        e_predicted = ph2energy(peaks_uncalibrated)
+        rms_residual_energy = np.std(e_predicted-peaks_in_energy_reference)
+        return pfit_gain, rms_residual_energy
+    
+    def to_mass_cal(self, previous_energy2ph, curvetype="gain", approximate=False):
+        cal = mass.calibration.EnergyCalibration(curvetype=curvetype, approximate=approximate)
+        df = self.results_params_as_df()
+        for peak_in_energy_rough_cal, e, name in zip(df["peak_ph"].to_numpy(), df["peak_energy_ref"].to_numpy(), 
+                            df["line"]):
+            ph_uncalibrated = previous_energy2ph(peak_in_energy_rough_cal)
+            cal.add_cal_point(ph_uncalibrated, e, name=str(name))
+        return cal
+
+
+    
 @dataclass(frozen=True)
-class MultiFitSplineStep(moss.CalStep):
-    ph2energy: callable
+class MultiFitQuadraticGainCalStep(moss.CalStep):
+    pfit_gain: np.polynomial.Polynomial
+    multifit: MultiFit
+    rms_residual_energy: float
+
+    def calc_from_df(self, df):
+        # only works with in memory data, but just takes it as numpy data and calls function
+        # is much faster than map_elements approach, but wouldn't work with out of core data without some extra book keeping
+        inputs_np = [df[input].to_numpy() for input in self.inputs]
+        out = self.ph2energy(inputs_np[0])
+        df2 = pl.DataFrame({self.output[0]: out}).with_columns(df)
+        return df2
+
+    def dbg_plot(self, df):
+        self.multifit.plot_results_and_pfit(uncalibrated_name=self.inputs[0],
+                                            previous_energy2ph=self.energy2ph)
+
+
+    
+    def ph2energy(self, ph):
+        gain = self.pfit_gain(ph)
+        return ph/gain
+
+    def energy2ph(self, energy):
+        # ph2energy is equivalent to this with y=energy, x=ph
+        # y = x/(c + b*x + a*x^2)
+        # so
+        # y*c + (y*b-1)*x + a*x^2 = 0
+        # and given that we've selected for well formed calibrations,
+        # we know which root we want
+        cba = self.pfit_gain.convert().coef
+        c,bb,a = cba*energy
+        b=bb-1
+        ph = (-b-np.sqrt(b**2-4*a*c))/(2*a)
+        import math
+        assert math.isclose(self.ph2energy(ph), energy, rel_tol=1e-6, abs_tol=1e-3)
+        return ph
+    
+    @classmethod
+    def learn(cls, ch, multifit_spec: MultiFit, previous_cal_step_index, 
+        calibrated_col, use_expr=True
+    ):
+        previous_cal_step = ch.steps[previous_cal_step_index]
+        rough_energy_col = previous_cal_step.output[0]
+        uncalibrated_col = previous_cal_step.inputs[0]
+
+        multifit_with_results = multifit_spec.fit_ch(ch, col=rough_energy_col)
+        multifit_df = multifit_with_results.results_params_as_df()
+        pfit_gain, rms_residual_energy = multifit_with_results.to_pfit_gain(previous_cal_step.energy2ph)
+        step = cls(
+            [uncalibrated_col],
+            [calibrated_col],
+            ch.good_expr,
+            use_expr,
+            pfit_gain,
+            multifit_with_results,
+            rms_residual_energy
+        )
+        return step
+    
+  
+@dataclass(frozen=True)
+class MultiFitMassCalibrationStep(moss.CalStep):
+    cal: mass.EnergyCalibration
     multifit: MultiFit
 
     def calc_from_df(self, df):
@@ -163,33 +270,52 @@ class MultiFitSplineStep(moss.CalStep):
         return df2
 
     def dbg_plot(self, df):
-        self.multifit.plot_results()
+        axes = self.multifit.plot_results_and_pfit(uncalibrated_name=self.inputs[0],
+                                            previous_energy2ph=self.energy2ph,
+                                            n_extra_axes=1)
+        ax = axes[-1]
+        multifit_df = self.multifit.results_params_as_df()
+        peaks_in_energy_rough_cal = multifit_df["peak_ph"].to_numpy()
+        peaks_uncalibrated = np.array([self.energy2ph(e) for e in peaks_in_energy_rough_cal])
+        peaks_in_energy_reference = multifit_df["peak_energy_ref"].to_numpy()
+        plt.sca(ax)
+        x = np.linspace(1, np.amax(peaks_uncalibrated))
+        gain_from_cal = x/self.cal(x)
+        plt.plot(x, gain_from_cal, label="mass cal")
+        gain = peaks_uncalibrated/peaks_in_energy_reference
+        plt.plot(peaks_uncalibrated, gain, "o")
+        plt.xlabel(self.inputs[0])
+        plt.ylabel("gain")
+        plt.title("actual mass cal")
+        for name, x, y in zip(multifit_df["line"], peaks_uncalibrated, gain):
+            ax.annotate(str(name), (x,y))
+        plt.legend()
 
-    def energy2ph(self, e):
-        return self.ph2energy.solve(e)[0]
+    
+    def ph2energy(self, ph):
+        return self.cal.ph2energy(ph)
+
+    def energy2ph(self, energy):
+        return self.cal.energy2ph(energy)
     
     @classmethod
-    def learn(cls, ch, multifit: MultiFit, previous_cal_step_index, 
+    def learn(cls, ch, multifit_spec: MultiFit, previous_cal_step_index, 
         calibrated_col, use_expr=True
     ):
-        import scipy.interpolate
-        from scipy.interpolate import CubicSpline
+        """multifit then make a mass calibration object with curve_type="gain" and approx=False
+        TODO: support more options"""
         previous_cal_step = ch.steps[previous_cal_step_index]
         rough_energy_col = previous_cal_step.output[0]
         uncalibrated_col = previous_cal_step.inputs[0]
 
-        fits_with_results = multifit.fit_ch(ch, col=rough_energy_col)
-        multifit_df = fits_with_results.results_params_as_df()
-        peaks_in_energy_rough_cal = multifit_df["peak_ph"].to_numpy()
-        peaks_uncalibrated = [previous_cal_step.energy2ph(e) for e in peaks_in_energy_rough_cal]
-        peaks_in_energy_reference = multifit_df["peak_energy_ref"].to_numpy()
-        spline = CubicSpline(peaks_uncalibrated, peaks_in_energy_reference, bc_type="natural")
+        multifit_with_results = multifit_spec.fit_ch(ch, col=rough_energy_col)
+        cal = multifit_with_results.to_mass_cal(previous_cal_step.energy2ph)
         step = cls(
             [uncalibrated_col],
             [calibrated_col],
             ch.good_expr,
             use_expr,
-            spline,
-            fits_with_results,
+            cal,
+            multifit_with_results,
         )
         return step

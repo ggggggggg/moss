@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.7.12"
+__generated_with = "0.7.17"
 app = marimo.App(width="medium", app_title="MOSS intro")
 
 
@@ -71,6 +71,64 @@ def __(mo):
 
 
 @app.cell
+def __(data, mo, moss, plt):
+    ch0 = data.ch0.summarize_pulses()
+    line_names = ["MnKAlpha", "MnKBeta", "CuKAlpha", "CuKBeta", "PdLAlpha", "PdLBeta"]
+    calibrated_col = None
+    uncalibrated_col = "peak_value"
+    use_expr = True
+    max_fractional_energy_error_3rd_assignment: float = 0.1
+    min_gain_fraction_at_ph_30k: float = 0.25
+    fwhm_pulse_height_units: float = 75
+    n_extra_peaks: int = 10
+    acceptable_rms_residual_e: float = 10
+    import mass  # type: ignore
+
+    if calibrated_col is None:
+        calibrated_col = f"energy_{uncalibrated_col}"
+    (line_names, line_energies) = mass.algorithms.line_names_and_energies(line_names)
+    uncalibrated = ch0.good_series(uncalibrated_col, use_expr=use_expr).to_numpy()
+    pfresult = moss.rough_cal.peakfind_local_maxima_of_smoothed_hist(
+        uncalibrated, fwhm_pulse_height_units=fwhm_pulse_height_units
+    )
+    pfresult.plot()
+    possible_phs = pfresult.ph_sorted_by_prominence()[: len(line_names) + n_extra_peaks]
+    df3peak, dfe = moss.rough_cal.rank_3peak_assignments(
+        possible_phs,
+        line_energies,
+        line_names,
+        max_fractional_energy_error_3rd_assignment,
+        min_gain_fraction_at_ph_30k,
+    )
+    mo.mpl.interactive(plt.gcf())
+    return (
+        acceptable_rms_residual_e,
+        calibrated_col,
+        ch0,
+        df3peak,
+        dfe,
+        fwhm_pulse_height_units,
+        line_energies,
+        line_names,
+        mass,
+        max_fractional_energy_error_3rd_assignment,
+        min_gain_fraction_at_ph_30k,
+        n_extra_peaks,
+        pfresult,
+        possible_phs,
+        uncalibrated,
+        uncalibrated_col,
+        use_expr,
+    )
+
+
+@app.cell
+def __(df3peak):
+    df3peak
+    return
+
+
+@app.cell
 def __(data):
     data2 = data.map(
         lambda channel: channel.summarize_pulses()
@@ -78,22 +136,16 @@ def __(data):
         .rough_cal(
             ["MnKAlpha", "MnKBeta", "CuKAlpha", "CuKBeta", "PdLAlpha", "PdLBeta"],
             uncalibrated_col="peak_value",
-            calibrated_col="energy_peak_value",
-            ph_smoothing_fwhm=50,
         )
         .filter5lag(f_3db=10e3)
         .rough_cal(
             ["MnKAlpha", "MnKBeta", "CuKAlpha", "CuKBeta", "PdLAlpha", "PdLBeta"],
             uncalibrated_col="5lagy",
-            calibrated_col="energy_5lagy",
-            ph_smoothing_fwhm=50,
         )
-        .driftcorrect() 
+        .driftcorrect()
         .rough_cal(
             ["MnKAlpha", "MnKBeta", "CuKAlpha", "CuKBeta", "PdLAlpha", "PdLBeta"],
             uncalibrated_col="5lagy_dc",
-            calibrated_col="energy_5lagy_dc",
-            ph_smoothing_fwhm=50,
         )
     )
     return data2,
@@ -171,7 +223,7 @@ def __(mo):
     return
 
 
-@app.cell
+@app.cell(disabled=True)
 def __(ch, mo, plt):
     ch.noise.spectrum().plot()
     mo.mpl.interactive(plt.gcf())
@@ -363,7 +415,9 @@ def __(data2, pl):
     # we also drop the "pulse" column here because sorting will acually copy the underlying data
     # and we dont want to do that
     data3 = data2.map(
-        lambda ch: ch.with_replacement_df(ch.df.select(pl.exclude("pulse")).sort(by="timestamp"))
+        lambda ch: ch.with_replacement_df(
+            ch.df.select(pl.exclude("pulse")).sort(by="timestamp")
+        )
     )
     data3 = data3.with_experiment_state_by_path()
     return data3,
@@ -415,7 +469,7 @@ def __(mo):
 @app.cell
 def __(data3, mo, moss, plt):
     multifit = moss.MultiFit(default_fit_width=80, default_bin_size=0.6)
-    multifit = multifit.with_line("MnKAlpha").with_line("CuKAlpha").with_line("PdLAlpha")
+    multifit = multifit.with_line("MnKAlpha").with_line("CuKAlpha").with_line("PdLAlpha").with_line("MnKBeta")
     multifit_with_results = multifit.fit_ch(data3.channels[4102], "energy_5lagy_dc")
     multifit_with_results.plot_results()
     mo.mpl.interactive(plt.gcf())
@@ -424,18 +478,18 @@ def __(data3, mo, moss, plt):
 
 @app.cell
 def __(multifit_with_results):
-    pd_result, mn_result, cu_result = multifit_with_results.results
+    pd_result, mn_result, mn_kbeta_result, cu_result = multifit_with_results.results
     print(mn_result.params["fwhm"].value, cu_result.params["fwhm"].value)
     assert mn_result.params["fwhm"].value < 3.39
     assert cu_result.params["fwhm"].value < 3.42
     # this is super weird, depending on what energies we use for drift correction, we get wildily different resolutions, including Cu being better than Mn, and we can do sub-3eV Mn
-    return cu_result, mn_result, pd_result
+    return cu_result, mn_kbeta_result, mn_result, pd_result
 
 
 @app.cell
 def __(data3, multifit):
     data4 = data3.map(
-        lambda ch: ch.multifit_spline_cal(
+        lambda ch: ch.multifit_mass_cal(
             multifit, previous_cal_step_index=5, calibrated_col="energy2_5lagy_dc"
         )
     )
@@ -520,14 +574,16 @@ def __(data2):
 def __(ch6, moss, np):
     indicator = ch6.good_series("pretrig_mean", use_expr=True).to_numpy()
     uncorrected = ch6.good_series("energy_5lagy_dc", use_expr=True).to_numpy()
-    dc_result=moss.rough_cal.minimize_entropy_linear(indicator, uncorrected, bin_edges = np.arange(0, 9000, 1), fwhm_in_bin_number_units=4)
+    dc_result = moss.rough_cal.minimize_entropy_linear(
+        indicator, uncorrected, bin_edges=np.arange(0, 9000, 1), fwhm_in_bin_number_units=4
+    )
     print(dc_result)
     return dc_result, indicator, uncorrected
 
 
 @app.cell
 def __(ch6, mo, np, plt):
-    ch6.plot_hist("energy_5lagy_dc", np.arange(0,10000,1))
+    ch6.plot_hist("energy_5lagy_dc", np.arange(0, 10000, 1))
     mo.mpl.interactive(plt.gcf())
     return
 
@@ -536,23 +592,32 @@ def __(ch6, mo, np, plt):
 def __(ch6, mo, np, pl, plt):
     def pfit_dc(line_name, ch):
         import mass
+
         dlo, dhi = 50, 50
         e0 = mass.STANDARD_FEATURES[line_name]
-        pt, e = ch.good_serieses(["pretrig_mean", "energy_5lagy"], use_expr=pl.col("energy_5lagy_dc").is_between(e0-dlo, e0+dhi))
+        pt, e = ch.good_serieses(
+            ["pretrig_mean", "energy_5lagy"],
+            use_expr=pl.col("energy_5lagy_dc").is_between(e0 - dlo, e0 + dhi),
+        )
         ptm = np.mean(pt.to_numpy())
-        ptzm = pt-ptm
-        ezm = e-np.mean(e.to_numpy())
-        plt.plot(ptzm,ezm, ".")
+        ptzm = pt - ptm
+        ezm = e - np.mean(e.to_numpy())
+        plt.plot(ptzm, ezm, ".")
         pfit_dc = np.polynomial.Polynomial.fit(ptzm, ezm, deg=1)
         slope = pfit_dc.deriv(1).convert().coef[0]
         pt_plt = np.arange(-60, 60, 1)
         plt.plot(pt_plt, pfit_dc(pt_plt))
-        plt.plot(ptzm, ezm-slope*ptzm,".")
+        plt.plot(ptzm, ezm - slope * ptzm, ".")
         plt.title(f"{slope=:.4} {slope/e0=:g} {line_name=}")
         plt.xlabel("pt zero mean")
         plt.ylabel("energy zero mean")
-        ch2 = ch.with_columns(ch.df.select(pl.col("energy_5lagy")-slope*(pl.col("pretrig_mean")-ptm)).rename({"energy_5lagy":f"energy_5lagy_dc_{line_name}"}))
+        ch2 = ch.with_columns(
+            ch.df.select(
+                pl.col("energy_5lagy") - slope * (pl.col("pretrig_mean") - ptm)
+            ).rename({"energy_5lagy": f"energy_5lagy_dc_{line_name}"})
+        )
         return ch2
+
 
     ch7 = pfit_dc("MnKAlpha", ch6)
     fig11 = plt.gcf()
