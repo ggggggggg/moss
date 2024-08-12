@@ -2,13 +2,16 @@ import numpy as np
 import polars as pl
 import os
 import collections
+from polars.dataframe.frame import DataFrame
+from typing import Tuple, Optional
 
 
 
 
 class LJHFile():
     TOO_LONG_HEADER=100
-    def __init__(self, filename, _limit_pulses = None):
+    def __init__(self, filename: str, _limit_pulses: Optional[None] = None):
+        self.nPulses:int
         self.filename = filename
         self.__read_header(self.filename)
         self.dtype = np.dtype([('rowcount', np.int64),
@@ -113,7 +116,7 @@ class LJHFile():
     def read_trace(self, i):
         return self._mmap[i]["data"]
     
-    def to_polars(self, keep_posix_usec=False):
+    def to_polars(self, keep_posix_usec: bool=False) -> Tuple[DataFrame, DataFrame]:
         df = pl.DataFrame({"pulse":self._mmap["data"],
                            "posix_usec":self._mmap["posix_usec"],
                            "rowcount":self._mmap["rowcount"]},
