@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import numpy as np
-import pylab as plt #type: ignore
+import pylab as plt # type: ignore
 import moss
 import polars as pl
 from matplotlib.axes._axes import Axes
@@ -8,81 +8,8 @@ from moss.channel import Channel
 from numpy import float32, float64, ndarray
 from polars.dataframe.frame import DataFrame
 from numpy.polynomial import Polynomial
-from scipy.optimize._optimize import OptimizeResult #type: ignore
-import typing
-from typing import List, Optional, Tuple, Union, Callable
-import itertools
-
-
-
-def rank_3peak_assignments(
-    ph,
-    e,
-    line_names,
-    max_fractional_energy_error_3rd_assignment=0.1,
-    min_gain_fraction_at_ph_30k=0.25,
-):
-    # we explore possible line assignments, and down select based on knowledge of gain curve shape
-    # gain = ph/e, and we assume gain starts at zero, decreases with pulse height, and
-    # that a 2nd order polynomial is a reasonably good approximation
-    # with one assignment we model the gain as constant, and use that to find the most likely
-    # 2nd assignments, then we model the gain as linear, and use that to rank 3rd assignments
-    dfe = pl.DataFrame({"e0_ind": np.arange(len(e)), "e0": e, "name": line_names})
-    dfph = pl.DataFrame({"ph0_ind": np.arange(len(ph)), "ph0": ph})
-
-    #### 1st assignments ####
-    # e0 and ph0 are the first assignment
-    df0 = (
-        dfe.join(dfph, how="cross")
-        .with_columns(gain0=pl.col("ph0") / pl.col("e0"))
-    )
-    #### 2nd assignments ####
-    # e1 and ph1 are the 2nd assignment
-    df1 = (
-        df0.join(df0, how="cross")
-        .rename({"e0_right": "e1", "ph0_right": "ph1"})
-        .drop("e0_ind_right", "ph0_ind_right", "gain0_right")
-    )
-    # 1) keep only assignments with e0<e1 and ph0<ph1 to avoid looking at the same pair in reverse
-    df1 = df1.filter((pl.col("e0") < pl.col("e1")).and_(pl.col("ph0") < pl.col("ph1")))
-    # 2) the gain slope must be negative
-    df1 = (
-        df1.with_columns(gain1=pl.col("ph1") / pl.col("e1"))
-        .with_columns(
-            gain_slope=(pl.col("gain1") - pl.col("gain0"))
-            / (pl.col("ph1") - pl.col("ph0"))
-        )
-        .filter(pl.col("gain_slope") < 0)
-    )
-    # 3) the gain slope should not have too large a magnitude
-    df1 = df1.with_columns(
-        gain_at_0=pl.col("gain0") - pl.col("ph0") * pl.col("gain_slope")
-    )
-    df1 = df1.with_columns(
-        gain_frac_at_ph30k=(1 + 30000 * pl.col("gain_slope") / pl.col("gain_at_0"))
-    )
-    df1 = df1.filter(pl.col("gain_frac_at_ph30k") > min_gain_fraction_at_ph_30k)
-
-    #### 3rd assignments ####
-    # e2 and ph2 are the 3rd assignment
-    df2 = df1.join(df0.select(e2="e0", ph2="ph0"), how="cross")
-    df2 = df2.with_columns(
-        gain_at_ph2=pl.col("gain_at_0") + pl.col("gain_slope") * pl.col("ph2")
-    )
-    df2 = df2.with_columns(e_at_ph2=pl.col("ph2") / pl.col("gain_at_ph2"))
-    df2 = df2.filter((pl.col("e1") < pl.col("e2")).and_(pl.col("ph1")<pl.col("ph2")))
-    # 1) rank 3rd assignments by energy error at ph2 assuming gain = gain_slope*ph+gain_at_0
-    # where gain_slope and gain are calculated from assignments 1 and 2
-    df2 = df2.with_columns(e_err_at_ph2=pl.col("e_at_ph2") - pl.col("e2")).sort(
-        by=np.abs(pl.col("e_err_at_ph2"))
-    )
-    # 2) return a dataframe downselected to the assignments and the ranking criteria
-    # 3) throw away assignments with large (default 10%) energy errors
-    df3peak = df2.select("e0", "ph0", "e1", "ph1", "e2", "ph2", "e_err_at_ph2").filter(
-        np.abs(pl.col("e_err_at_ph2") / pl.col("e2"))
-        < max_fractional_energy_error_3rd_assignment
-    )
-    return df3peak, dfe
+from scipy.optimize._optimize import OptimizeResult # type: ignore
+from typing import List, Optional, Tuple, Union
 
 @dataclass(frozen=True)
 class BestAssignmentPfitGainResult:
@@ -122,18 +49,12 @@ class BestAssignmentPfitGainResult:
     def ph2energy(self, ph: Union[ndarray, float]) -> Union[float64, ndarray]:
         return ph/self.pfit_gain(ph)
     
-    def energy2ph(self, energy):
-        # ph2energy is equivalent to this with y=energy, x=ph
-        # y = x/(c + b*x + a*x^2)
-        # so
-        # y*c + (y*b-1)*x + a*x^2 = 0
-        # and given that we've selected for well formed calibrations,
-        # we know which root we want
-        cba = self.pfit_gain.convert().coef
-        c,bb,a = cba*energy
-        b=bb-1
-        ph = (-b-np.sqrt(b**2-4*a*c))/(2*a)
-        return ph
+    def energy2ph(self, energy: float64) -> float:
+        import scipy.optimize # type: ignore
+        sol = scipy.optimize.root_scalar(lambda ph: self.ph2energy(ph)-energy, 
+                                   bracket=[1,self.phzerogain()*0.9])
+        assert sol.converged
+        return sol.root
     
     def predicted_energies(self):
         return self.ph2energy(self.ph_assigned)
@@ -515,7 +436,7 @@ class RoughCalibrationStep(moss.CalStep):
         ph_smoothing_fwhm: int, n_extra: int,
         use_expr: bool=True
     ) -> "RoughCalibrationStep":
-        import mass #type: ignore
+        import mass # type: ignore
 
         (names, ee) = mass.algorithms.line_names_and_energies(line_names)
         uncalibrated = ch.good_series(uncalibrated_col, use_expr=use_expr).to_numpy()

@@ -1,16 +1,24 @@
 from dataclasses import dataclass, field
-import lmfit
+import lmfit 
 import copy
-import mass
+import mass 
 import math
 import numpy as np
 import polars as pl
-from typing import Optional
+from typing import List, Tuple, Union, Optional
 import moss
-import pylab as plt
+import pylab as plt 
+from lmfit.parameter import Parameters #type: ignore
+from mass.calibration.line_models import LineModelResult #type: ignore
+from matplotlib.figure import Figure
+from moss.channel import Channel
+from numpy import ndarray
+from polars.dataframe.frame import DataFrame
+from polars.expr.expr import Expr
+from polars.series.series import Series
 
 
-def handle_none(val, default):
+def handle_none(val: None, default: Union[float, bool, Parameters]) -> Union[float, bool, Parameters]:
     if val is None:
         return copy.copy(default)
     return val
@@ -24,14 +32,14 @@ class FitSpec:
     use_expr: pl.Expr
     params_update: lmfit.parameter.Parameters
 
-    def params(self, bin_centers, counts):
+    def params(self, bin_centers: ndarray, counts: ndarray) -> Parameters:
         params = self.model.make_params()
         params = self.model.guess(counts, bin_centers=bin_centers, dph_de=1)
         params["dph_de"].set(1.0, vary=False)
         params = params.update(self.params_update)
         return params
 
-    def fit_series_without_use_expr(self, series):
+    def fit_series_without_use_expr(self, series: Series) -> LineModelResult:
         bin_centers, counts = moss.misc.hist_of_series(series, self.bin_edges)
         params = self.params(bin_centers, counts)
         bin_centers, bin_size = moss.misc.midpoints_and_step_size(self.bin_edges)
@@ -46,7 +54,7 @@ class FitSpec:
         )
         return result
     
-    def fit_df(self, df: pl.DataFrame, col: str, good_expr: pl.Expr):       
+    def fit_df(self, df: pl.DataFrame, col: str, good_expr: pl.Expr) -> LineModelResult:       
         series = moss.good_series(df, col, good_expr, use_expr=self.use_expr)
         return self.fit_series_without_use_expr(series)
     
@@ -63,8 +71,8 @@ class MultiFit:
     results: Optional[list] = None
 
     def with_line(
-        self, line, dlo=None, dhi=None, bin_size=None, use_expr=None, params_update=None
-    ):
+        self, line: str, dlo: None=None, dhi: None=None, bin_size: None=None, use_expr: None=None, params_update: None=None
+    ) -> "MultiFit":
         model = mass.getmodel(line)
         peak_energy = model.spect.peak_energy
         dlo = handle_none(dlo, self.default_fit_width/2)
@@ -76,7 +84,7 @@ class MultiFit:
         fitspec = FitSpec(model, bin_edges, use_expr, params_update)
         return self.with_fitspec(fitspec)
 
-    def with_fitspec(self, fitspec):
+    def with_fitspec(self, fitspec: FitSpec) -> "MultiFit":
         return MultiFit(
             self.default_fit_width,
             self.default_bin_size,
@@ -87,7 +95,7 @@ class MultiFit:
             self.results,
         )
 
-    def with_results(self, results):
+    def with_results(self, results: List[LineModelResult]) -> "MultiFit":
         return MultiFit(
             self.default_fit_width,
             self.default_bin_size,
@@ -97,7 +105,7 @@ class MultiFit:
             results,
         )
 
-    def results_params_as_df(self):
+    def results_params_as_df(self) -> DataFrame:
         result = self.results[0]
         param_names = result.params.keys()
         d = {}
@@ -112,17 +120,17 @@ class MultiFit:
         results = [fitspec.fit_series_without_use_expr(series) for fitspec in self.fitspecs]
         return self.with_results(results)
 
-    def fit_df(self, df: pl.DataFrame, col: str, good_expr: pl.Expr):
+    def fit_df(self, df: pl.DataFrame, col: str, good_expr: pl.Expr) -> "MultiFit":
         results = []
         for fitspec in self.fitspecs:
             result = fitspec.fit_df(df, col, good_expr)
             results.append(result)
         return self.with_results(results)   
     
-    def fit_ch(self, ch, col: str):
+    def fit_ch(self, ch: Channel, col: str) -> "MultiFit":
         return self.fit_df(ch.df, col, ch.good_expr)
 
-    def plot_results(self, n_extra_axes=0):
+    def plot_results(self) -> Tuple[Figure, ndarray]:
         assert self.results is not None
         n = len(self.results)+n_extra_axes
         cols = min(3, n)
@@ -261,7 +269,7 @@ class MultiFitMassCalibrationStep(moss.CalStep):
     cal: mass.EnergyCalibration
     multifit: MultiFit
 
-    def calc_from_df(self, df):
+    def calc_from_df(self, df: DataFrame) -> DataFrame:
         # only works with in memory data, but just takes it as numpy data and calls function
         # is much faster than map_elements approach, but wouldn't work with out of core data without some extra book keeping
         inputs_np = [df[input].to_numpy() for input in self.inputs]
@@ -299,11 +307,11 @@ class MultiFitMassCalibrationStep(moss.CalStep):
         return self.cal.energy2ph(energy)
     
     @classmethod
-    def learn(cls, ch, multifit_spec: MultiFit, previous_cal_step_index, 
-        calibrated_col, use_expr=True
-    ):
-        """multifit then make a mass calibration object with curve_type="gain" and approx=False
-        TODO: support more options"""
+    def learn(cls, ch: Channel, multifit: MultiFit, previous_cal_step_index: int, 
+        calibrated_col: str, use_expr: bool=True
+    ) -> "MultiFitSplineStep":
+        import scipy.interpolate #type: ignore
+        from scipy.interpolate import CubicSpline #type: ignore
         previous_cal_step = ch.steps[previous_cal_step_index]
         rough_energy_col = previous_cal_step.output[0]
         uncalibrated_col = previous_cal_step.inputs[0]
