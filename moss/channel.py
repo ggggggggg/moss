@@ -7,6 +7,7 @@ import moss
 from moss import NoiseChannel, CalSteps, DriftCorrectStep, SummarizeStep, Filter5LagStep
 from typing import Optional
 import numpy as np
+from typing import Union
 import time
 import mass
 

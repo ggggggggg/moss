@@ -9,8 +9,13 @@ from moss import CalStep
 import polars as pl
 import typing
 import pylab as plt
+from matplotlib.axes._axes import Axes
+from moss.channel import Channel
+from numpy import ndarray
+from polars.dataframe.frame import DataFrame
+from polars.expr.expr import Expr
 
-def drift_correct_mass(indicator, uncorrected):
+def drift_correct_mass(indicator: ndarray, uncorrected: ndarray) -> "DriftCorrection":
     slope, dc_info = \
             mass.core.analysis_algorithms.drift_correct(indicator, uncorrected)
     offset = dc_info["median_pretrig_mean"]
@@ -27,7 +32,7 @@ drift_correct = drift_correct_mass
 class DriftCorrectStep(CalStep):
     dc: typing.Any
 
-    def calc_from_df(self, df):
+    def calc_from_df(self, df: DataFrame) -> DataFrame:
         indicator_col, uncorrected_col = self.inputs
         slope, offset = self.dc.slope, self.dc.offset
         df2 = df.select(
@@ -35,7 +40,7 @@ class DriftCorrectStep(CalStep):
         ).with_columns(df)
         return df2
 
-    def dbg_plot(self, df):
+    def dbg_plot(self, df: DataFrame) -> Axes:
         indicator_col, uncorrected_col = self.inputs
         # breakpoint()
         df_small = (
@@ -56,7 +61,7 @@ class DriftCorrectStep(CalStep):
         return plt.gca()
     
     @classmethod
-    def learn(cls, ch, indicator_col, uncorrected_col, corrected_col, use_expr):
+    def learn(cls, ch: Channel, indicator_col: str, uncorrected_col: str, corrected_col: str, use_expr: Expr) -> "DriftCorrectStep":
         if corrected_col is None:
             corrected_col = uncorrected_col + "_dc"
         indicator_s, uncorrected_s = ch.good_serieses([indicator_col, uncorrected_col], use_expr)
