@@ -7,6 +7,10 @@ import collections
 import mass
 import moss
 import joblib
+from mass.calibration.line_models import LineModelResult
+from pathlib import WindowsPath
+from polars.dataframe.frame import DataFrame
+from typing import Callable, List, Optional, Tuple
 
 @dataclass(frozen=True)
 class Channels:
@@ -20,7 +24,7 @@ class Channels:
             return v
 
     @functools.cache
-    def dfg(self, exclude="pulse"):
+    def dfg(self, exclude: str="pulse") -> DataFrame:
         # return a dataframe containing good pulses from each channel,
         # exluding "pulse" by default
         # and including columns "key" (to be removed?) and "ch_num"
@@ -38,15 +42,15 @@ class Channels:
 
     def linefit(
         self,
-        line,
-        col,
-        use_expr=True,
-        has_linear_background=False,
-        has_tails=False,
-        dlo=50,
-        dhi=50,
-        binsize=0.5,
-    ):
+        line: str,
+        col: str,
+        use_expr: bool=True,
+        has_linear_background: bool=False,
+        has_tails: bool=False,
+        dlo: int=50,
+        dhi: int=50,
+        binsize: float=0.5,
+    ) -> LineModelResult:
         model = mass.get_model(line, has_linear_background=False, has_tails=False)
         pe = model.spect.peak_energy
         _bin_edges = np.arange(pe - dlo, pe + dhi, binsize)
@@ -67,7 +71,7 @@ class Channels:
         )
         return result
 
-    def map(self, f, allow_throw=True):
+    def map(self, f: Callable, allow_throw: bool=True) -> "Channels":
         new_channels = collections.OrderedDict()
         for key, channel in self.channels.items():
             try:
@@ -91,7 +95,7 @@ class Channels:
         results = parallel(joblib.delayed(work)(key) for key in self.channels.keys())
         return results
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         # needed to make functools.cache work
         # if self or self.anything is mutated, assumptions will be broken
         # and we may get nonsense results
@@ -101,7 +105,7 @@ class Channels:
         return id(self) == id(other)
 
     @classmethod
-    def from_ljh_path_pairs(cls, pulse_noise_pairs, description):
+    def from_ljh_path_pairs(cls, pulse_noise_pairs: List[Tuple[str, str]], description: str) -> "Channels":
         _channels = collections.OrderedDict()
         for pulse_path, noise_path in pulse_noise_pairs:
             channel = moss.Channel.from_ljh(pulse_path, noise_path)
@@ -117,7 +121,7 @@ class Channels:
         return cls(channels, description)
 
     @classmethod
-    def from_ljh_folder(cls, pulse_folder, noise_folder=None, limit=None):
+    def from_ljh_folder(cls, pulse_folder: str, noise_folder: Optional[str]=None, limit: None=None) -> "Channels":
         import os
         assert os.path.isdir(pulse_folder),f"{pulse_folder=} {noise_folder=}"
         if noise_folder is None:
@@ -129,7 +133,7 @@ class Channels:
         description = f"from_ljh_folder {pulse_folder=} {noise_folder=}"
         return cls.from_ljh_path_pairs(pairs, description)
     
-    def get_experiment_state_df(self, experiment_state_path=None):
+    def get_experiment_state_df(self, experiment_state_path: Optional[str]=None) -> DataFrame:
         if experiment_state_path is None:
             first_ch = next(iter(self.channels.values()))
             ljh_path = first_ch.header.df["Filename"][0]
@@ -142,14 +146,14 @@ class Channels:
         df_es = df_es.with_columns(state_label = pl.Series(values=sl_series, dtype=pl.Categorical))
         return df_es
     
-    def with_experiment_state_by_path(self, experiment_state_path=None):
+    def with_experiment_state_by_path(self, experiment_state_path: str=None) -> "Channels":
         df_es = self.get_experiment_state_df(experiment_state_path)
         return self.with_experiment_state(df_es)
 
-    def with_experiment_state(self, df_es):
+    def with_experiment_state(self, df_es: DataFrame) -> "Channels":
         # this is not as performant as making use_exprs for states
         # and using .set_sorted on the timestamp column
-        ch2s = {}
+        ch2s:collections.OrderedDict[int, moss.Channel] = {}
         for ch_num, ch in self.channels.items():
             ch2s[ch_num] = ch.with_experiment_state_df(df_es)
         return Channels(ch2s, self.description)    
@@ -162,7 +166,7 @@ class Channels:
             ch2s[ch_num] = ch2
         return Channels(ch2s, self.description+"\nfollowed some steps!!")
     
-    def concat_data(self, other_data):
+    def concat_data(self, other_data: "Channels") -> "Channels":
         # sorting here to show intention, but I think set is sorted by insertion order as
         # an implementation detail so this may not do anything
         ch_nums = sorted(list(set(self.channels.keys()).union(other_data.channels.keys())))
