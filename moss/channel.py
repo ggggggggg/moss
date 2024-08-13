@@ -137,10 +137,10 @@ class Channel:
     def rough_cal(self, line_names: list[str | np.float64],
     uncalibrated_col: str="filtValue",
     calibrated_col: Optional[str]=None,
-    use_expr: bool | pl.Expr =True,
+    use_expr: Union[bool,pl.Expr] =True,
     max_fractional_energy_error_3rd_assignment: float=0.1,
     min_gain_fraction_at_ph_30k: float=0.25,
-    fwhm_pulse_height_units: float=75,
+    fwhm_pulse_height_units: int=75,
     n_extra_peaks: int=10,
     acceptable_rms_residual_e: float=10):
         step = moss.RoughCalibrationStep.learn_3peak(self, line_names, uncalibrated_col, calibrated_col,

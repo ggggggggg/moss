@@ -465,10 +465,10 @@ class RoughCalibrationStep(moss.CalStep):
     line_names: list[str | float64],
     uncalibrated_col: str="filtValue",
     calibrated_col: Optional[str]=None,
-    use_expr: pl.Expr =True,
+    use_expr: Union[bool, pl.Expr] =True,
     max_fractional_energy_error_3rd_assignment: float=0.1,
     min_gain_fraction_at_ph_30k: float=0.25,
-    fwhm_pulse_height_units: float=75,
+    fwhm_pulse_height_units: int=75,
     n_extra_peaks: int=10,
     acceptable_rms_residual_e: float=10) -> "RoughCalibrationStep":
         import mass #type: ignore
@@ -481,7 +481,7 @@ class RoughCalibrationStep(moss.CalStep):
             uncalibrated, fwhm_pulse_height_units=fwhm_pulse_height_units
         )
         possible_phs = pfresult.ph_sorted_by_prominence()[:len(line_names)+n_extra_peaks]
-        df3peak, dfe = rank_3peak_assignments(
+        df3peak, dfe = rank_3peak_assignments( #type:ignore
             possible_phs,
             line_energies,
             line_names,
@@ -489,7 +489,7 @@ class RoughCalibrationStep(moss.CalStep):
             min_gain_fraction_at_ph_30k,
         )
         best_rms_residual = np.inf
-        best_assignment_result = None
+        best_assignment_result=None
         for assignment_row in df3peak.select("e0", "ph0", "e1", "ph1", "e2", "ph2", "e_err_at_ph2").iter_rows():
             e0, ph0, e1, ph1, e2, ph2, e_err_at_ph2 = assignment_row
             rms_residual, assignment_result = eval_3peak_assignment_pfit_gain(
@@ -502,7 +502,7 @@ class RoughCalibrationStep(moss.CalStep):
                     break
         if not np.isinf(best_rms_residual):
             success = True
-            ph2energy=best_assignment_result.ph2energy
+            ph2energy=best_assignment_result.ph2energy #type:ignore
             df3peak_on_failure = None
         else:
             success=False

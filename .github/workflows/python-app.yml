@@ -42,7 +42,7 @@ jobs:
     - name: Test with mypy
       run: |
         cd moss
-        mypy --follow-imports=silent misc.py ljhfiles.py
+        mypy --follow-imports=silent misc.py ljhfiles.py noise_channel.py noise_algorithms.py multifit.py ljhutil.py filters.py drift_correction.py channels.py channel.py cal_steps.py
 
     
     

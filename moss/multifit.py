@@ -19,7 +19,7 @@ from polars.expr.expr import Expr
 from polars.series.series import Series
 
 
-def handle_none(val: Optional[None], default: Union[float, bool, Parameters]) -> Union[float, bool, Parameters]:
+def handle_none(val: Union[None, float, bool, typing.Any], default: Union[float, bool, Parameters]) -> Union[float, bool, Parameters]:
     if val is None:
         return copy.copy(default)
     return val
@@ -30,7 +30,7 @@ def handle_none(val: Optional[None], default: Union[float, bool, Parameters]) ->
 class FitSpec:
     model: mass.GenericLineModel
     bin_edges: np.ndarray
-    use_expr: pl.Expr
+    use_expr: Union[float,bool,typing.Any,None]
     params_update: lmfit.parameter.Parameters
 
     def params(self, bin_centers: ndarray, counts: ndarray) -> Parameters:
@@ -108,14 +108,14 @@ class MultiFit:
         )
 
     def results_params_as_df(self) -> DataFrame:
-        result = self.results[0]
+        result = self.results[0] #type:ignore
         param_names = result.params.keys()
         d = {}
-        d["line"] = [fitspec.model.spect.shortname for fitspec in self.fitspecs]
-        d["peak_energy_ref"] = [fitspec.model.spect.peak_energy for fitspec in self.fitspecs]
+        d["line"] = [fitspec.model.spect.shortname for fitspec in self.fitspecs] 
+        d["peak_energy_ref"] = [fitspec.model.spect.peak_energy for fitspec in self.fitspecs] 
         for param_name in param_names:
-            d[param_name]=[result.params[param_name].value for result in self.results]
-            d[param_name+"_strerr"]=[result.params[param_name].stderr for result in self.results]
+            d[param_name]=[result.params[param_name].value for result in self.results] #type:ignore
+            d[param_name+"_strerr"]=[result.params[param_name].stderr for result in self.results] #type:ignore
         return pl.DataFrame(d)
 
     def fit_series_without_use_expr(self, series: pl.Series):
@@ -130,11 +130,12 @@ class MultiFit:
         return self.with_results(results)   
     
     def fit_ch(self, ch: Channel, col: str) -> "MultiFit":
-        return self.fit_df(ch.df, col, ch.good_expr)
+        return self.fit_df(ch.df, col, ch.good_expr) #type:ignore
 
     def plot_results(self) -> Tuple[Figure, ndarray]:
         assert self.results is not None
-        n = len(self.results)+n_extra_axes
+        n_extra_axes:int
+        n = len(self.results)+ n_extra_axes
         cols = min(3, n)
         rows = math.ceil(n / cols)
         fig, axes = plt.subplots(
@@ -310,21 +311,21 @@ class MultiFitMassCalibrationStep(moss.CalStep):
     
     @classmethod
     def learn(cls, ch: Channel, multifit: MultiFit, previous_cal_step_index: int, 
-        calibrated_col: str, use_expr: bool=True
-    ) -> "MultiFitSplineStep":
+        calibrated_col: str, use_expr: Union[pl.Expr,bool]=True
+    ) -> "MultiFitSplineStep": #type:ignore
         import scipy.interpolate #type: ignore
         from scipy.interpolate import CubicSpline #type: ignore
         previous_cal_step = ch.steps[previous_cal_step_index]
         rough_energy_col = previous_cal_step.output[0]
         uncalibrated_col = previous_cal_step.inputs[0]
 
-        multifit_with_results = multifit_spec.fit_ch(ch, col=rough_energy_col)
+        multifit_with_results = multifit_spec.fit_ch(ch, col=rough_energy_col) #type:ignore
         cal = multifit_with_results.to_mass_cal(previous_cal_step.energy2ph)
         step = cls(
             [uncalibrated_col],
             [calibrated_col],
             ch.good_expr,
-            use_expr,
+            use_expr,#type:ignore
             cal,
             multifit_with_results,
         )
