@@ -134,7 +134,7 @@ class Channel:
                                              use_expr=use_expr)
         return self.with_step(step)
     
-    def rough_cal(self, line_names: list[str | float],
+    def rough_cal(self, line_names: list[str | np.float64],
     uncalibrated_col: str="filtValue",
     calibrated_col: Optional[str]=None,
     use_expr: bool | pl.Expr =True,
@@ -441,7 +441,7 @@ class Channel:
     
     def multifit_mass_cal(self, multifit: moss.MultiFit, 
                             previous_cal_step_index, calibrated_col, use_expr=True):
-        step = moss.MultiFitMassCalibrationStep.learn(self, multifit_spec=multifit,
+        step = moss.MultiFitMassCalibrationStep.learn(self, multifit=multifit,
                                             previous_cal_step_index=previous_cal_step_index,
                                              calibrated_col=calibrated_col,
                                              use_expr=use_expr)

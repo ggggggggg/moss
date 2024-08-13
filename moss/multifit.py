@@ -5,7 +5,8 @@ import mass
 import math
 import numpy as np
 import polars as pl
-from typing import List, Tuple, Union, Optional
+import typing
+from typing import List, Tuple, Union, Optional, Any
 import moss
 import pylab as plt 
 from lmfit.parameter import Parameters #type: ignore
@@ -18,7 +19,7 @@ from polars.expr.expr import Expr
 from polars.series.series import Series
 
 
-def handle_none(val: None, default: Union[float, bool, Parameters]) -> Union[float, bool, Parameters]:
+def handle_none(val: Optional[None], default: Union[float, bool, Parameters]) -> Union[float, bool, Parameters]:
     if val is None:
         return copy.copy(default)
     return val
@@ -55,7 +56,8 @@ class FitSpec:
         return result
     
     def fit_df(self, df: pl.DataFrame, col: str, good_expr: pl.Expr) -> LineModelResult:       
-        series = moss.good_series(df, col, good_expr, use_expr=self.use_expr)
+        use_expr = isinstance(good_expr, bool) and good_expr
+        series = moss.good_series(df, col, good_expr, use_expr=use_expr)
         return self.fit_series_without_use_expr(series)
     
     def fit_ch(self, ch, col: str):
@@ -71,7 +73,7 @@ class MultiFit:
     results: Optional[list] = None
 
     def with_line(
-        self, line: str, dlo: None=None, dhi: None=None, bin_size: None=None, use_expr: None=None, params_update: None=None
+        self, line: str, dlo: Union[float,bool,typing.Any, None]=None, dhi:  Union[float,bool,typing.Any,None]=None, bin_size:  Union[float,bool,typing.Any,None]=None, use_expr:  Union[float,bool,typing.Any,None]=None, params_update:  Union[float,bool,typing.Any,None]=None
     ) -> "MultiFit":
         model = mass.getmodel(line)
         peak_energy = model.spect.peak_energy

@@ -18,16 +18,17 @@ class NoiseChannel:
     @functools.cache
     def calc_max_excursion(
         self, trace_col_name: str="pulse", n_limit: int=10000, excursion_nsigma: int=5
-    ) -> Tuple[DataFrame, float64]:
+    ) -> Tuple[DataFrame,float64]:
         def excursion2d(noise_trace):
             return np.amax(noise_trace, axis=1) - np.amin(noise_trace, axis=1)
-        noise_traces = self.df.limit(n_limit)[trace_col_name].to_numpy()
+        df = self.df.collect() if isinstance(self.df, pl.LazyFrame) else self.df
+        noise_traces = df.limit(n_limit)[trace_col_name].to_numpy()
         excursion = excursion2d(noise_traces)
         max_excursion = moss.misc.outlier_resistant_nsigma_above_mid(
             excursion, nsigma=excursion_nsigma
         )
-        df_noise2 = self.df.with_columns(excursion=excursion)
-        return df_noise2, max_excursion
+        df_noise2 = df.with_columns(excursion=excursion)
+        return df_noise2, np.float64(max_excursion)
 
     @functools.cache
     def spectrum(

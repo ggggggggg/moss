@@ -29,16 +29,20 @@ class Channels:
         # exluding "pulse" by default
         # and including columns "key" (to be removed?) and "ch_num"
         # the more common call should be to wrap this in a convenient plotter
-        dfs = []
+        dfs: List[pl.DataFrame] = []
         for ch_num, channel in self.channels.items():
-            df = channel.df.select(pl.exclude(exclude)).filter(channel.good_expr)
+            df = channel.df.collect() if isinstance(channel.df, pl.LazyFrame) else channel.df
+            rows=df.height
+            
             # key_series = pl.Series("key", dtype=pl.Int64).extend_constant(key, len(df))
             assert ch_num == channel.header.ch_num
             ch_series = pl.Series("ch_num", dtype=pl.Int64).extend_constant(
-                channel.header.ch_num, len(df)
+                channel.header.ch_num, rows
             )
             dfs.append(df.with_columns(ch_series))
-        return pl.concat(dfs)
+        
+        combined_df=pl.concat(dfs)
+        return combined_df
 
     def linefit(
         self,
@@ -126,7 +130,7 @@ class Channels:
         assert os.path.isdir(pulse_folder),f"{pulse_folder=} {noise_folder=}"
         if noise_folder is None:
             paths = moss.ljhutil.find_ljh_files(pulse_folder)
-            pairs = ((path, None) for path in paths)
+            pairs: List[Tuple[str, str]] = [(path,'') for path in paths]
         else:
             assert os.path.isdir(noise_folder), f"{pulse_folder=} {noise_folder=}"
             pairs = moss.ljhutil.match_files_by_channel(pulse_folder, noise_folder, limit=limit)
@@ -136,7 +140,8 @@ class Channels:
     def get_experiment_state_df(self, experiment_state_path: Optional[str]=None) -> DataFrame:
         if experiment_state_path is None:
             first_ch = next(iter(self.channels.values()))
-            ljh_path = first_ch.header.df["Filename"][0]
+            df = first_ch.header.df.collect() if isinstance(first_ch.header.df, pl.LazyFrame) else first_ch.header.df
+            ljh_path = df.select("Filename").to_series().item()
             experiment_state_path = moss.ljhutil.experiment_state_path_from_ljh_path(ljh_path)
         df = pl.read_csv(experiment_state_path, new_columns=["unixnano", "state_label"])
         # _col0, _col1 = df.columns
@@ -146,14 +151,14 @@ class Channels:
         df_es = df_es.with_columns(state_label = pl.Series(values=sl_series, dtype=pl.Categorical))
         return df_es
     
-    def with_experiment_state_by_path(self, experiment_state_path: str=None) -> "Channels":
+    def with_experiment_state_by_path(self, experiment_state_path: Optional[str]=None) -> "Channels":
         df_es = self.get_experiment_state_df(experiment_state_path)
         return self.with_experiment_state(df_es)
 
     def with_experiment_state(self, df_es: DataFrame) -> "Channels":
         # this is not as performant as making use_exprs for states
         # and using .set_sorted on the timestamp column
-        ch2s:collections.OrderedDict[int, moss.Channel] = {}
+        ch2s: collections.OrderedDict[int, moss.Channel] = collections.OrderedDict()
         for ch_num, ch in self.channels.items():
             ch2s[ch_num] = ch.with_experiment_state_df(df_es)
         return Channels(ch2s, self.description)    
@@ -170,7 +175,7 @@ class Channels:
         # sorting here to show intention, but I think set is sorted by insertion order as
         # an implementation detail so this may not do anything
         ch_nums = sorted(list(set(self.channels.keys()).union(other_data.channels.keys())))
-        channels2 = {}
+        channels2:collections.OrderedDict[int, moss.Channel] = collections.OrderedDict()
         for ch_num in ch_nums:
             ch = self.channels[ch_num]
             other_ch = other_data.channels[ch_num]

@@ -9,6 +9,7 @@ from numpy import float32, float64, ndarray
 from polars.dataframe.frame import DataFrame
 from numpy.polynomial import Polynomial
 from scipy.optimize._optimize import OptimizeResult # type: ignore
+import typing
 from typing import List, Optional, Tuple, Union
 
 @dataclass(frozen=True)
@@ -258,13 +259,15 @@ def find_pfit_gain_residual(ph: ndarray, e: Tuple[float, float, float, float, fl
 
 
 def find_best_residual_among_all_possible_assignments2(ph: ndarray, e:ndarray, names: list[str]) -> BestAssignmentPfitGainResult:
-    best_rms_residual, best_ph_assigned, best_residual_e, best_assignment_inds, best_pfit = find_best_residual_among_all_possible_assignments(ph,e)
+    ph_tuple = tuple(ph)  
+    e_tuple = tuple(e) 
+    best_rms_residual, best_ph_assigned, best_residual_e, best_assignment_inds, best_pfit = find_best_residual_among_all_possible_assignments(ph,e_tuple)
     return BestAssignmentPfitGainResult(float(best_rms_residual), best_ph_assigned, best_residual_e, best_assignment_inds, best_pfit, e, names, ph)
 
 def find_best_residual_among_all_possible_assignments(ph: ndarray, e: Tuple[float, float, float, float, float, float]) -> Tuple[float64, ndarray, ndarray, ndarray, Polynomial]:
     assert len(ph) >= len(e)
     ph=np.sort(ph)
-    assignments_inds = itertools.combinations(np.arange(len(ph)), len(e))
+    assignments_inds = itertools.combinations(np.arange(len(ph)), len(e)) #type: ignore
     best_rms_residual = np.inf
     best_ph_assigned = None
     best_residual_e = None
@@ -424,7 +427,7 @@ class RoughCalibrationStep(moss.CalStep):
     def dbg_plot_failure(self, df: DataFrame, axs: Union[None,ndarray]=None):
         if axs is None:
             fig, axs = plt.subplots(2, 1, figsize=(11,6))
-        print(f"{self.df3peak_on_failure=}")
+        print(f"{self.df3peak_on_failure=}") #type:ignore
         self.pfresult.plot(self.assignment_result, ax=axs[1])
         plt.tight_layout()
     
@@ -434,7 +437,7 @@ class RoughCalibrationStep(moss.CalStep):
     @classmethod
     def learn_combinatoric(cls, ch: Channel, line_names: List[str], uncalibrated_col: str, calibrated_col: str, 
         ph_smoothing_fwhm: int, n_extra: int,
-        use_expr: bool=True
+        use_expr: Union[pl.Expr,bool]=True
     ) -> "RoughCalibrationStep":
         import mass # type: ignore
 
@@ -462,7 +465,7 @@ class RoughCalibrationStep(moss.CalStep):
     line_names: list[str | float64],
     uncalibrated_col: str="filtValue",
     calibrated_col: Optional[str]=None,
-    use_expr: bool | pl.Expr =True,
+    use_expr: pl.Expr =True,
     max_fractional_energy_error_3rd_assignment: float=0.1,
     min_gain_fraction_at_ph_30k: float=0.25,
     fwhm_pulse_height_units: float=75,
