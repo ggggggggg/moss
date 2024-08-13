@@ -2,9 +2,17 @@ import numpy as np
 import pylab as plt
 import polars as pl
 import dill
+import matplotlib.pyplot as plt
+from matplotlib.axes._axes import Axes
+from moss.cal_steps import CalSteps
+from numpy import float32, float64, int64, ndarray
+from polars.dataframe.frame import DataFrame
+from polars.expr.expr import Expr
+from polars.series.series import Series
+from typing import Dict, Optional, Tuple, Union
 
 
-def pickle_object(obj, filename):
+def pickle_object(obj: Dict[int, CalSteps], filename: str):
     with open(filename, 'wb') as file:
         dill.dump(obj, file)
 
@@ -19,7 +27,7 @@ def smallest_positive_real(arr):
     positive_real_numbers = np.array(list(filter(is_positive_real, arr)))
     return np.min(positive_real_numbers)
 
-def good_series(df, col, good_expr, use_expr):
+def good_series(df: DataFrame, col: str, good_expr: Expr, use_expr: bool) -> Series:
     # this uses lazy before filting to hopefully allow polars to only access the data needed to filter
     # and the data needed to output what we want
     return (
@@ -39,11 +47,13 @@ def sigma_mad(x):
     return median_absolute_deviation(x) * 1.4826
 
 
-def outlier_resistant_nsigma_above_mid(x, nsigma=5):
+def outlier_resistant_nsigma_above_mid(x: ndarray, nsigma: int=5) -> Union[float32, float64]:
     mid = np.median(x)
     mad = np.median(np.abs(x - mid))
     sigma_mad = mad * 1.4826
     return mid + nsigma * sigma_mad
+
+
 
 def outlier_resistant_nsigma_range_from_mid(x, nsigma=5):
     mid = np.median(x)
@@ -51,33 +61,35 @@ def outlier_resistant_nsigma_range_from_mid(x, nsigma=5):
     sigma_mad = mad * 1.4826
     return mid-nsigma*sigma_mad, mid + nsigma * sigma_mad    
 
-def midpoints_and_step_size(x):
+def midpoints_and_step_size(x: ndarray) -> Union[Tuple[ndarray, float64], Tuple[ndarray, int64]]:
     d = np.diff(x)
     step_size = d[0]
     assert np.allclose(d, step_size, atol=1e-9), f"{d=}"
     return x[:-1] + step_size, step_size
 
-def hist_of_series(series, bin_edges):
+def hist_of_series(series: Series, bin_edges: ndarray) -> Tuple[ndarray, ndarray]:
     bin_centers, step_size = midpoints_and_step_size(bin_edges)
+    bin_edges_list=bin_edges.tolist()
     counts = series.rename("count").hist(
-        bin_edges, include_category=False, include_breakpoint=False
+        bin_edges_list, include_category=False, include_breakpoint=False
     )[1:-1]
     return bin_centers, counts.to_numpy().T[0]
 
-def plot_hist_of_series(series, bin_edges, axis=None, **plotkwarg):
+def plot_hist_of_series(series: Series, bin_edges: ndarray, axis: Optional[plt.axis]=None, **plotkwarg) -> Axes:
     if axis is None:
         plt.figure()
         axis = plt.gca()
     bin_centers, step_size = midpoints_and_step_size(bin_edges)
+    bin_edges_list=bin_edges.tolist()
     hist = series.rename("count").hist(
-        bin_edges, include_category=False, include_breakpoint=False
+        bin_edges_list, include_category=False, include_breakpoint=False
     )[1:-1]
     axis.plot(bin_centers, hist, label=series.name, **plotkwarg)
     axis.set_xlabel(series.name)
     axis.set_ylabel(f"counts per {step_size:.2f} unit bin")
     return axis
 
-def plot_a_vs_b_series(a, b, axis=None, **plotkwarg):
+def plot_a_vs_b_series(a: Series, b: Series, axis: Optional[Axes]=None, **plotkwarg):
     if axis is None:
         plt.figure()
         axis = plt.gca()

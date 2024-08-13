@@ -6,13 +6,14 @@ import functools
 import typing
 import numpy as np
 import moss
+from typing import Callable, List, Optional, Tuple,Union
 
 
 @dataclass(frozen=True)
 class CalStep:
     inputs: list[str]
     output: list[str]
-    good_expr: pl.Expr
+    good_expr: Union[pl.Expr,bool]
     use_expr: pl.Expr
 
 

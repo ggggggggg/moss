@@ -3,19 +3,24 @@ import pylab as plt
 from dataclasses import dataclass
 import moss
 import polars as pl
+from numpy import float64, ndarray
+from polars.dataframe.frame import DataFrame
+from typing import Optional, Tuple, Union
+import matplotlib.pyplot as plt
 
-def fourier_filter(avg_signal, noise_psd, dt, fmax=None, f_3db=None, peak_signal=1.0):
+
+def fourier_filter(avg_signal: ndarray, noise_psd: ndarray, dt: float, fmax: None=None, f_3db: Optional[float]=None, peak_signal: float=1.0) -> "Filter":
     filter, variance = calc_fourier_filter(avg_signal, noise_psd, dt, fmax, f_3db, peak_signal)
     return Filter(filter, variance, dt, filter_type="fourier")    
 
 @dataclass(frozen=True)
 class Filter:
     filter: np.ndarray
-    variance: float
+    variance: float64
     dt: float
     filter_type: str
 
-    def plot(self, axis=None, **plotkwarg):
+    def plot(self, axis: Optional[plt.axes]=None, **plotkwarg):
         if axis is None:
             plt.figure()
             axis = plt.gca()
@@ -26,14 +31,14 @@ class Filter:
         axis.set_xlabel("Lag Time (s)")
         axis.figure.tight_layout()
 
-    def frequencies(self):
+    def frequencies(self) -> ndarray:
         n = len(self.filter)
         return np.arange(0, n, dtype=float) * 0.5 / ((n - 1) * self.dt)
 
     def __call__(self, pulse):
         return np.dot(self.filter, pulse)
 
-def apply_fmax(signal_freq_domain, fmax, dt):
+def apply_fmax(signal_freq_domain: ndarray, fmax: None, dt: float) -> ndarray:
     if fmax is None:
         return signal_freq_domain
     n = len(signal_freq_domain)
@@ -42,18 +47,18 @@ def apply_fmax(signal_freq_domain, fmax, dt):
     out[freq>fmax]=0
     return out
 
-def apply_f_3db(signal_freq_domain, f_3db, dt):
+def apply_f_3db(signal_freq_domain: ndarray, f_3db: Union[float,None], dt: float) -> ndarray:
     if f_3db is None:
         return signal_freq_domain
     n = len(signal_freq_domain)
     freq = np.arange(0, n, dtype=float) * 0.5 / ((n - 1) * dt)
     return signal_freq_domain / (1 + (freq * 1.0 / f_3db)**2)
 
-def normalize_filter(filter):
+def normalize_filter(filter: ndarray) -> ndarray:
     filter -= np.mean(filter)
     return filter/np.sqrt(np.dot(filter, filter))
 
-def calc_fourier_filter(avg_signal, noise_psd, dt, fmax=None, f_3db=None, peak_signal=1.0):
+def calc_fourier_filter(avg_signal: ndarray, noise_psd: ndarray, dt: float, fmax: None=None, f_3db: Optional[float]=None, peak_signal: float=1.0) -> Tuple[ndarray, float64]:
     """Compute the Fourier-domain filter and variances for signal processing.
 
     Args:
@@ -86,7 +91,7 @@ def calc_fourier_filter(avg_signal, noise_psd, dt, fmax=None, f_3db=None, peak_s
     variance = 1 / kappa
     return normalize_filter(filter), variance
 
-def filter_data_5lag(filter_values, pulses):
+def filter_data_5lag(filter_values: ndarray, pulses: ndarray) -> Tuple[ndarray, ndarray]:
     # These parameters fit a parabola to any 5 evenly-spaced points
     fit_array = (
         np.array(
@@ -113,7 +118,7 @@ class Filter5LagStep(moss.CalStep):
     filter: Filter
     spectrum: moss.NoisePSD
 
-    def calc_from_df(self, df):
+    def calc_from_df(self, df: DataFrame) -> DataFrame:
         dfs = []
         for df_iter in df.iter_slices(10000):
             peak_x, peak_y = moss.filters.filter_data_5lag(
@@ -124,5 +129,5 @@ class Filter5LagStep(moss.CalStep):
         df2 = df2.rename({"peak_x": self.output[0], "peak_y": self.output[1]})
         return df2
 
-    def dbg_plot(self, df):
+    def dbg_plot(self, df: DataFrame) -> None:
         return self.filter.plot()

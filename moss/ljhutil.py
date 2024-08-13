@@ -62,7 +62,7 @@ def extract_channel_number(file_path: str) -> int:
     else:
         raise ValueError(f"File path does not match expected pattern: {file_path}")
 
-def match_files_by_channel(folder1: str, folder2: str, limit=None) -> List[Iterator[Tuple[str, str]]]:
+def match_files_by_channel(folder1: str, folder2: str, limit: None=None) -> List[Tuple[str, str]]:
     """
     Matches .ljh files from two folders by channel number.
 
@@ -89,7 +89,7 @@ def match_files_by_channel(folder1: str, folder2: str, limit=None) -> List[Itera
 
     return matching_pairs
 
-def experiment_state_path_from_ljh_path(ljh_path):
+def experiment_state_path_from_ljh_path(ljh_path: str) -> str:
     # Split the path into directory and filename
     dir_name, file_name = os.path.split(ljh_path)
     

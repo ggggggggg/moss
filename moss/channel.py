@@ -7,6 +7,7 @@ import moss
 from moss import NoiseChannel, CalSteps, DriftCorrectStep, SummarizeStep, Filter5LagStep
 from typing import Optional
 import numpy as np
+from typing import Union
 import time
 import mass
 
@@ -133,13 +134,13 @@ class Channel:
                                              use_expr=use_expr)
         return self.with_step(step)
     
-    def rough_cal(self, line_names: list[str | float],
+    def rough_cal(self, line_names: list[str | np.float64],
     uncalibrated_col: str="filtValue",
     calibrated_col: Optional[str]=None,
-    use_expr: bool | pl.Expr =True,
+    use_expr: Union[bool,pl.Expr] =True,
     max_fractional_energy_error_3rd_assignment: float=0.1,
     min_gain_fraction_at_ph_30k: float=0.25,
-    fwhm_pulse_height_units: float=75,
+    fwhm_pulse_height_units: int=75,
     n_extra_peaks: int=10,
     acceptable_rms_residual_e: float=10):
         step = moss.RoughCalibrationStep.learn_3peak(self, line_names, uncalibrated_col, calibrated_col,
@@ -440,7 +441,7 @@ class Channel:
     
     def multifit_mass_cal(self, multifit: moss.MultiFit, 
                             previous_cal_step_index, calibrated_col, use_expr=True):
-        step = moss.MultiFitMassCalibrationStep.learn(self, multifit_spec=multifit,
+        step = moss.MultiFitMassCalibrationStep.learn(self, multifit=multifit,
                                             previous_cal_step_index=previous_cal_step_index,
                                              calibrated_col=calibrated_col,
                                              use_expr=use_expr)
