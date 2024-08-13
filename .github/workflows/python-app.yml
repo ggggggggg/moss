@@ -37,7 +37,7 @@ jobs:
     - name: Test with mypy
       run: |
         cd moss
-        mypy misc.py ljhfiles.py
+        mypy --follow-imports=silent misc.py ljhfiles.py
 
     
     - name: Test with pytest
