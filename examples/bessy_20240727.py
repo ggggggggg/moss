@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.10.9"
+__generated_with = "0.10.13"
 app = marimo.App(width="medium", app_title="MOSS intro")
 
 
@@ -94,7 +94,7 @@ def _(data3, moss):
 @app.cell
 def _(data, moss):
     def _do_analysis(ch: moss.Channel) -> moss.Channel:
-        return ch.summarize_pulses().with_good_expr_pretrig_mean_and_postpeak_deriv()
+        return ch.summarize_pulses().with_good_expr_pretrig_rms_and_postpeak_deriv()
 
 
     data2 = data.map(_do_analysis)
