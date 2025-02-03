@@ -12,6 +12,7 @@ def fourier_filter(avg_signal, n_pretrigger, noise_psd, noise_autocorr_vec, dt, 
                              noise_autocorr=noise_autocorr_vec,
                              sample_time_sec=dt, peak=peak_signal)
     mass_filter = maker.compute_5lag(fmax=fmax, f_3db=f_3db)
+    print(f"{n_pretrigger=}")
     return Filter(filter=mass_filter.values,
                   v_dv_known_wrong=mass_filter.predicted_v_over_dv,
                   dt=dt,

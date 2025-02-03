@@ -375,7 +375,9 @@ class Channel:
     def typical_peak_ind(self, col="pulse"):
         return int(np.median(self.df.limit(100)[col].to_numpy().argmax(axis=1)))
 
-    def summarize_pulses(self, col="pulse") -> "Channel":
+    def summarize_pulses(self, col="pulse", n_presamples=None) -> "Channel":
+        if n_presamples is None:
+            n_presamples = self.header.n_presamples
         step = SummarizeStep(
             inputs=[col],
             output="many",
@@ -385,7 +387,7 @@ class Channel:
             peak_index=self.typical_peak_ind(col),
             pulse_col=col,
             pretrigger_ignore=0,
-            n_presamples=self.header.n_presamples,
+            n_presamples=n_presamples,
         )
         return self.with_step(step)
 
@@ -396,7 +398,10 @@ class Channel:
         peak_x_col="5lagx",
         f_3db=25e3,
         use_expr=True,
+        n_presamples=None
     ) -> "Channel":
+        if n_presamples is None:
+            n_presamples = self.header.n_presamples
         avg_pulse = (
             self.df.lazy()
             .filter(self.good_expr)
@@ -411,7 +416,7 @@ class Channel:
         spectrum5lag = self.noise.spectrum(trunc_front=2, trunc_back=2)
         filter5lag = moss.fourier_filter(
             avg_signal=avg_pulse,
-            n_pretrigger=self.header.n_presamples,
+            n_pretrigger=n_presamples,
             noise_psd=spectrum5lag.psd,
             noise_autocorr_vec=spectrum5lag.autocorr_vec,
             dt=self.header.frametime_s,
