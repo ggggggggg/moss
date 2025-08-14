@@ -617,7 +617,7 @@ class Channel:
         return self.with_step(step)
 
     def concat_df(self, df) -> "Channel":
-        ch2 = moss.Channel(pl.concat([self.df, df]),
+        ch2 = moss.Channel(moss.misc.concat_dfs_with_concat_state(self.df, df),
                            self.header,
                            self.noise,
                            self.good_expr

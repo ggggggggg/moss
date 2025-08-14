@@ -33,7 +33,8 @@ class Filter:
             axis = plt.gca()
         axis.plot(self.frequencies(), self.filter, label="mass 5lag filter", **plotkwarg)
         axis.grid()
-        axis.set_title(f"{self.filter_type=} v_dv_known_wrong={self.v_over_dv:.2f}")
+        axis.set_title(f"{self.filter_type=} v_dv={self.v_over_dv:.2f}")
+    
         axis.set_ylabel("filter value")
         axis.set_xlabel("Lag Time (s)")
         axis.figure.tight_layout()

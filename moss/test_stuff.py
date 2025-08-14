@@ -252,3 +252,15 @@ def test_noise_psd_ordering_should_be_extended_to_colored_noise():
     assert len(psd.frequencies) == 6
     assert np.allclose(psd_raw.frequencies[:5], psd.frequencies[:5])
     assert np.allclose(psd_raw.psd, psd.psd)
+
+def test_concat_dfs_with_concat_state():
+    import polars as pl
+    import moss.misc
+    df1 = pl.DataFrame({"a": [1, 2, 3]})
+    df2 = pl.DataFrame({"a": [7, 8]})
+    df_concat = moss.misc.concat_dfs_with_concat_state(df1, df2)
+    assert df_concat.shape == (5, 2)
+    assert df_concat["concat_state"].to_list() == [0] * 3 + [1] * 2
+    df_concat2 = moss.misc.concat_dfs_with_concat_state(df_concat, df2)
+    assert df_concat2.shape == (7, 2)
+    assert df_concat2["concat_state"].to_list() == [0] * 3 + [1] * 2 + [2] * 2
